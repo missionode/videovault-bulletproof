@@ -843,9 +843,48 @@
                 font-size: 1.3rem;
             }
         }
+
+        /* Privacy Shield */
+        .privacy-shield {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(26, 35, 126, 0.8);
+            backdrop-filter: blur(30px);
+            -webkit-backdrop-filter: blur(30px);
+            z-index: 999999;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .privacy-shield i {
+            font-size: 5rem;
+            margin-bottom: 20px;
+        }
+
+        body.app-hidden .privacy-shield {
+            display: flex;
+        }
+
+        body.app-hidden .app-container {
+            filter: blur(20px);
+            pointer-events: none;
+        }
     </style>
 </head>
 <body>
+    <div id="privacyShield" class="privacy-shield">
+        <i class="fas fa-user-shield"></i>
+        <h2>Privacy Mode Active</h2>
+        <p>Content is hidden while the app is in the background.</p>
+    </div>
     <div class="app-container">
         <header>
             <h1 class="app-title">
@@ -2398,6 +2437,36 @@
         
         // Initialize app
         document.addEventListener('DOMContentLoaded', async () => {
+            // Privacy Shield Logic
+            const togglePrivacy = (hide) => {
+                if (hide) {
+                    document.body.classList.add('app-hidden');
+                } else {
+                    document.body.classList.remove('app-hidden');
+                }
+            };
+
+            document.addEventListener('visibilitychange', () => {
+                togglePrivacy(document.hidden);
+            });
+
+            window.addEventListener('blur', () => togglePrivacy(true));
+            window.addEventListener('focus', () => togglePrivacy(false));
+
+            // Disable Context Menu (Right-Click)
+            document.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                return false;
+            });
+
+            // Prevent dragging of video elements
+            document.addEventListener('dragstart', (e) => {
+                if (e.target.tagName === 'VIDEO') {
+                    e.preventDefault();
+                    return false;
+                }
+            });
+
             // Check PWA installation
             if (window.matchMedia('(display-mode: standalone)').matches) {
                 installButton.style.display = 'none';

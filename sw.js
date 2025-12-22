@@ -1,5 +1,5 @@
 // sw.js - Service Worker
-const CACHE_NAME = 'securevideo-v7';
+const CACHE_NAME = 'securevideo-v8';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
