@@ -1,0 +1,2438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="icons/favicon-32x32.png" type="image/x-icon">
+    <title>SecureVideo Vault - Encrypted Video Recorder</title>
+    <meta name="theme-color" content="#1a237e">
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/fix-webm-duration@1.0.5/fix-webm-duration.js"></script>
+    <style>
+        :root {
+            --primary: #4f46e5;
+            --primary-light: #818cf8;
+            --primary-dark: #3730a3;
+            --secondary: #ec4899;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --light: #f9fafb;
+            --dark: #111827;
+            --gray: #6b7280;
+            --border-radius: 12px;
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            --shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        }
+
+        body {
+            background-color: #f3f4f6;
+            background-image: radial-gradient(at 0% 0%, hsla(253,16%,7%,1) 0, transparent 50%), 
+                              radial-gradient(at 50% 0%, hsla(225,39%,30%,1) 0, transparent 50%), 
+                              radial-gradient(at 100% 0%, hsla(339,49%,30%,1) 0, transparent 50%);
+            background-attachment: fixed;
+            color: var(--dark);
+            min-height: 100vh;
+            padding: 20px;
+            line-height: 1.5;
+        }
+
+        .app-container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background-color: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 24px;
+            box-shadow: var(--shadow);
+            overflow: hidden;
+            min-height: calc(100vh - 40px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+        }
+
+        header {
+            background: transparent;
+            color: var(--dark);
+            padding: 40px 20px 20px;
+            text-align: center;
+            position: relative;
+        }
+
+        .app-title {
+            font-size: 2.25rem;
+            font-weight: 800;
+            letter-spacing: -0.025em;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            color: var(--primary-dark);
+        }
+
+        .app-subtitle {
+            font-size: 1rem;
+            color: var(--gray);
+            font-weight: 500;
+            margin-bottom: 10px;
+        }
+
+        .install-btn {
+            position: absolute;
+            right: 40px;
+            top: 40px;
+            background: var(--dark);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 9999px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 600;
+            font-size: 0.875rem;
+            transition: var(--transition);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .install-btn:hover {
+            background: #000;
+            transform: translateY(-1px);
+            box-shadow: var(--shadow);
+        }
+
+        .install-btn.hidden {
+            display: none;
+        }
+
+        .main-nav {
+            display: flex;
+            background-color: rgba(243, 244, 246, 0.5);
+            margin: 0 20px;
+            padding: 6px;
+            border-radius: 16px;
+            gap: 4px;
+        }
+
+        .nav-btn {
+            flex: 1;
+            padding: 12px;
+            background: none;
+            border: none;
+            color: var(--gray);
+            font-size: 0.875rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--transition);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            border-radius: 12px;
+        }
+
+        .nav-btn.active {
+            background-color: white;
+            color: var(--primary);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .nav-btn:hover:not(.active) {
+            background-color: rgba(255, 255, 255, 0.5);
+            color: var(--dark);
+        }
+
+        .view {
+            display: none;
+            padding: 40px;
+            min-height: 500px;
+        }
+
+        .view.active {
+            display: block;
+            animation: fadeIn 0.4s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .step-indicator {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 40px;
+            position: relative;
+            gap: 8px;
+        }
+
+        .step {
+            width: 40px;
+            height: 40px;
+            border-radius: 12px;
+            background-color: white;
+            color: var(--gray);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            position: relative;
+            z-index: 2;
+            transition: var(--transition);
+            border: 2px solid #e5e7eb;
+        }
+
+        .step.active {
+            background-color: var(--primary);
+            color: white;
+            border-color: var(--primary);
+            transform: scale(1.1);
+            box-shadow: 0 0 20px rgba(79, 70, 229, 0.3);
+        }
+
+        .step.completed {
+            background-color: var(--success);
+            color: white;
+            border-color: var(--success);
+        }
+
+        .step-line {
+            display: none; /* Removed for a cleaner look */
+        }
+
+        .step-container {
+            display: none;
+            max-width: 650px;
+            margin: 0 auto;
+        }
+
+        .step-container.active {
+            display: block;
+            animation: slideIn 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        @keyframes slideIn {
+            from { transform: translateX(20px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        .step-title {
+            font-size: 1.75rem;
+            font-weight: 700;
+            margin-bottom: 12px;
+            color: var(--dark);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            letter-spacing: -0.01em;
+        }
+
+        .step-description {
+            color: var(--gray);
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #f3f4f6;
+            font-size: 1rem;
+        }
+
+        .form-group {
+            margin-bottom: 24px;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: var(--dark);
+            font-size: 0.875rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .input-with-icon {
+            position: relative;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 12px 16px;
+            padding-right: 48px;
+            background-color: #f9fafb;
+            border: 2px solid #f3f4f6;
+            border-radius: var(--border-radius);
+            font-size: 1rem;
+            transition: var(--transition);
+            color: var(--dark);
+        }
+
+        .form-input:focus {
+            background-color: white;
+            border-color: var(--primary-light);
+            outline: none;
+            box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.1);
+        }
+
+        .password-toggle {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            color: var(--gray);
+            cursor: pointer;
+            font-size: 1.25rem;
+            padding: 4px;
+            border-radius: 6px;
+            transition: var(--transition);
+        }
+
+        .password-toggle:hover {
+            color: var(--dark);
+            background-color: #f3f4f6;
+        }
+
+        .help-text {
+            font-size: 0.8125rem;
+            color: var(--gray);
+            margin-top: 8px;
+            display: flex;
+            align-items: flex-start;
+            gap: 6px;
+        }
+
+        .help-text i {
+            margin-top: 2px;
+        }
+
+        .error-message {
+            color: var(--danger);
+            font-size: 0.8125rem;
+            margin-top: 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-weight: 500;
+            display: none;
+        }
+
+        .error-message.show {
+            display: flex;
+            animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both;
+        }
+
+        @keyframes shake {
+            10%, 90% { transform: translate3d(-1px, 0, 0); }
+            20%, 80% { transform: translate3d(2px, 0, 0); }
+            30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
+            40%, 60% { transform: translate3d(4px, 0, 0); }
+        }
+
+        .camera-container {
+            width: 100%;
+            background-color: #000;
+            border-radius: 20px;
+            overflow: hidden;
+            margin-bottom: 24px;
+            position: relative;
+            aspect-ratio: 16/9;
+            box-shadow: var(--shadow);
+            border: 4px solid white;
+        }
+
+        #videoPreview, #playbackVideo {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        #videoPreview.flipped {
+            transform: scaleX(-1);
+        }
+
+        .camera-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            padding: 20px;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.5), transparent);
+            color: white;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            z-index: 10;
+        }
+
+        .camera-controls {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 24px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 9999px;
+            font-size: 0.9375rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--transition);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            min-width: 140px;
+        }
+
+        .btn-primary {
+            background-color: var(--primary);
+            color: white;
+            box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.2), 0 2px 4px -1px rgba(79, 70, 229, 0.1);
+        }
+
+        .btn-primary:hover {
+            background-color: var(--primary-dark);
+            transform: translateY(-1px);
+            box-shadow: 0 10px 15px -3px rgba(79, 70, 229, 0.3);
+        }
+
+        .btn-secondary {
+            background-color: #f3f4f6;
+            color: var(--dark);
+        }
+
+        .btn-secondary:hover {
+            background-color: #e5e7eb;
+        }
+
+        .btn-success {
+            background-color: var(--success);
+            color: white;
+        }
+
+        .btn-success:hover {
+            background-color: #059669;
+        }
+
+        .btn-danger {
+            background-color: var(--danger);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background-color: #dc2626;
+        }
+
+        .btn-warning {
+            background-color: var(--warning);
+            color: white;
+        }
+
+        .btn-warning:hover {
+            background-color: #d97706;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+            box-shadow: none !important;
+        }
+
+        .recording-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background-color: rgba(239, 68, 68, 0.9);
+            padding: 6px 12px;
+            border-radius: 9999px;
+            color: white;
+            font-weight: 700;
+            font-size: 0.75rem;
+            backdrop-filter: blur(4px);
+            position: absolute;
+            left: 50%;
+            top: 20px;
+            transform: translateX(-50%);
+            z-index: 20;
+            white-space: nowrap;
+        }
+
+        .recording-dot {
+            width: 8px;
+            height: 8px;
+            background-color: white;
+            border-radius: 50%;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(0.8); }
+            100% { opacity: 1; transform: scale(1); }
+        }
+
+        .recording-timer {
+            font-variant-numeric: tabular-nums;
+            font-size: 1rem;
+            font-weight: bold;
+        }
+
+        .quality-selector {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .quality-btn {
+            flex: 1;
+            padding: 10px;
+            background-color: #f0f0f0;
+            border: 2px solid transparent;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: var(--transition);
+            font-size: 0.8125rem;
+            font-weight: 600;
+            color: var(--gray);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .quality-btn i {
+            font-size: 1.25rem;
+        }
+
+        .quality-btn.active {
+            background-color: white;
+            color: var(--primary);
+            border-color: var(--primary-light);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .quality-btn:hover:not(.active) {
+            background-color: #f3f4f6;
+            border-color: #e5e7eb;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 12px;
+            margin-top: 32px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .file-list {
+            margin-top: 24px;
+            background-color: #f9fafb;
+            border-radius: 16px;
+            overflow: hidden;
+            border: 1px solid #ddd;
+        }
+
+        .file-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 20px;
+            border-bottom: 1px solid #eee;
+            transition: var(--transition);
+        }
+
+        .file-item:hover {
+            background-color: #f9f9f9;
+        }
+
+        .file-item:last-child {
+            border-bottom: none;
+        }
+
+        .file-info {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .file-icon {
+            font-size: 1.5rem;
+            color: var(--primary);
+        }
+
+        .file-details {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .file-name {
+            font-weight: 600;
+            margin-bottom: 2px;
+        }
+
+        .file-meta {
+            font-size: 0.75rem;
+            color: var(--gray);
+        }
+
+        .file-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .status-message {
+            padding: 16px 20px;
+            border-radius: 16px;
+            margin-bottom: 24px;
+            display: none;
+            font-weight: 500;
+        }
+
+        .status-message.show {
+            display: block;
+            animation: fadeIn 0.4s ease-out;
+        }
+
+        .status-success {
+            background-color: rgba(76, 175, 80, 0.1);
+            color: var(--success);
+            border-left: 4px solid var(--success);
+        }
+
+        .status-info {
+            background-color: rgba(33, 150, 243, 0.1);
+            color: #2196f3;
+            border-left: 4px solid #2196f3;
+        }
+
+        .status-warning {
+            background-color: rgba(255, 152, 0, 0.1);
+            color: var(--warning);
+            border-left: 4px solid var(--warning);
+        }
+
+        .status-error {
+            background-color: rgba(244, 67, 54, 0.1);
+            color: var(--danger);
+            border-left: 4px solid var(--danger);
+        }
+
+        .permission-check {
+            padding: 24px;
+            background-color: #fff3e0;
+            border-radius: 16px;
+            margin-bottom: 24px;
+            border-left: 4px solid var(--warning);
+        }
+
+        .permission-status {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .permission-icon {
+            font-size: 1.5rem;
+        }
+
+        .permission-granted {
+            color: var(--success);
+        }
+
+        .permission-denied {
+            color: var(--danger);
+        }
+
+        .permission-actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 16px;
+        }
+
+        .device-selector {
+            margin-bottom: 24px;
+        }
+
+        .device-select {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #ddd;
+            border-radius: var(--border-radius);
+            font-size: 1rem;
+            background-color: white;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--gray);
+        }
+
+        .empty-state i {
+            font-size: 4rem;
+            margin-bottom: 24px;
+            opacity: 0.5;
+        }
+
+        .password-strength {
+            height: 6px;
+            background-color: #e0e0e0;
+            border-radius: 3px;
+            margin-top: 10px;
+            overflow: hidden;
+        }
+
+        .password-strength-bar {
+            height: 100%;
+            width: 0%;
+            transition: var(--transition);
+        }
+
+        .password-strength.weak .password-strength-bar {
+            background-color: var(--danger);
+            width: 33%;
+        }
+
+        .password-strength.medium .password-strength-bar {
+            background-color: var(--warning);
+            width: 66%;
+        }
+
+        .password-strength.strong .password-strength-bar {
+            background-color: var(--success);
+            width: 100%;
+        }
+
+        .fullscreen-btn {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.5rem;
+            cursor: pointer;
+            text-align: right;
+        }
+
+        #stopRecordingFullscreenBtn {
+            max-width: 200px;
+        }
+
+        .stop-recording-fullscreen {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 2147483647; /* High z-index to be on top of the video */
+            border-radius: 9999px;
+        }
+
+        .countdown-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 8rem;
+            font-weight: 800;
+            color: white;
+            text-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            z-index: 50;
+            display: none;
+            pointer-events: none;
+            font-variant-numeric: tabular-nums;
+        }
+        
+        .countdown-overlay.active {
+            display: block;
+            animation: pulse-countdown 1s cubic-bezier(0, 0, 0.2, 1) infinite;
+        }
+        
+        @keyframes pulse-countdown {
+            0% { transform: translate(-50%, -50%) scale(0.8); opacity: 0; }
+            50% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
+            100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+        }
+
+        footer {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--gray);
+            font-size: 0.8125rem;
+            border-top: 1px solid #eee;
+            margin-top: 30px;
+        }
+
+        /* Mobile responsive adjustments */
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+            
+            .app-container {
+                min-height: calc(100vh - 20px);
+            }
+            
+            .view {
+                padding: 24px 16px;
+            }
+            
+            .app-title {
+                font-size: 1.5rem;
+            }
+            
+            .install-btn {
+                position: relative;
+                right: auto;
+                top: auto;
+                transform: none;
+                margin-top: 10px;
+                justify-content: center;
+                width: 100%;
+            }
+            
+            .action-buttons {
+                flex-direction: column;
+            }
+            
+            .btn {
+                width: 100%;
+            }
+            
+            .camera-controls {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .file-item {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 16px;
+            }
+            
+            .file-actions {
+                align-self: flex-end;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .nav-btn span {
+                display: none;
+            }
+            
+            .nav-btn {
+                padding: 12px;
+            }
+            
+            .step-title {
+                font-size: 1.3rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <header>
+            <h1 class="app-title">
+                <i class="fas fa-shield-alt"></i>
+                SecureVideo Vault
+            </h1>
+            <p class="app-subtitle">Military-grade encrypted video recording & playback</p>
+            <button id="installButton" class="install-btn hidden">
+                <i class="fas fa-download"></i>
+                <span>Install App</span>
+            </button>
+        </header>
+        
+        <nav class="main-nav">
+            <button class="nav-btn active" data-view="record">
+                <i class="fas fa-video"></i>
+                <span>Record</span>
+            </button>
+            <button class="nav-btn" data-view="play">
+                <i class="fas fa-play-circle"></i>
+                <span>Playback</span>
+            </button>
+            <button class="nav-btn" data-view="files">
+                <i class="fas fa-folder"></i>
+                <span>My Files</span>
+            </button>
+        </nav>
+        
+        <!-- Record View -->
+        <section id="recordView" class="view active">
+            <div class="step-indicator">
+                <div class="step active">1</div>
+                <div class="step-line" style="width: 100px;"></div>
+                <div class="step">2</div>
+                <div class="step-line" style="width: 100px;"></div>
+                <div class="step">3</div>
+            </div>
+            
+            <!-- Step 1: Password Entry -->
+            <div id="step1" class="step-container active">
+                <h2 class="step-title">
+                    <i class="fas fa-key"></i>
+                    Set Encryption Keys
+                </h2>
+                <p class="step-description">
+                    Your video will be encrypted with two keys. Both are required to decrypt and view the video.
+                    <strong>Never share these keys</strong> and store them securely. Without both keys, the video cannot be recovered.
+                </p>
+                
+                <div id="permissionCheck" class="permission-check">
+                    <div class="permission-status">
+                        <i id="cameraPermissionIcon" class="fas fa-video permission-denied permission-icon"></i>
+                        <span id="cameraPermissionText">Camera permission not granted</span>
+                    </div>
+                    <p>This app requires camera access to record video. Please grant permission when prompted.</p>
+                    <div class="permission-actions">
+                        <button id="requestCameraBtn" class="btn btn-primary">
+                            <i class="fas fa-camera"></i>
+                            Request Camera Access
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">
+                        <i class="fas fa-key"></i>
+                        Master Key
+                    </label>
+                    <div class="input-with-icon">
+                        <input type="password" id="masterKey" class="form-input" placeholder="Enter your master key" minlength="8" autocomplete="off">
+                        <button type="button" class="password-toggle" data-target="masterKey">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </div>
+                    <div class="help-text">
+                        <i class="fas fa-info-circle"></i>
+                        Minimum 8 characters. This is the primary encryption key.
+                    </div>
+                    <div id="masterKeyStrength" class="password-strength">
+                        <div class="password-strength-bar"></div>
+                    </div>
+                    <div id="masterKeyError" class="error-message">
+                        <i class="fas fa-exclamation-circle"></i>
+                        <span></span>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">
+                        <i class="fas fa-lock"></i>
+                        Secure Key
+                    </label>
+                    <div class="input-with-icon">
+                        <input type="password" id="secureKey" class="form-input" placeholder="Enter your secure key" minlength="8" autocomplete="off">
+                        <button type="button" class="password-toggle" data-target="secureKey">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </div>
+                    <div class="help-text">
+                        <i class="fas fa-info-circle"></i>
+                        Minimum 8 characters. This is the secondary encryption key.
+                    </div>
+                    <div id="secureKeyStrength" class="password-strength">
+                        <div class="password-strength-bar"></div>
+                    </div>
+                    <div id="secureKeyError" class="error-message">
+                        <i class="fas fa-exclamation-circle"></i>
+                        <span></span>
+                    </div>
+                </div>
+                
+                <div class="action-buttons">
+                    <button id="nextToStep2" class="btn btn-primary">
+                        Continue
+                        <i class="fas fa-arrow-right"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Step 2: Camera Setup -->
+            <div id="step2" class="step-container">
+                <h2 class="step-title">
+                    <i class="fas fa-camera"></i>
+                    Camera Setup
+                </h2>
+                <p class="step-description">
+                    Configure your camera settings. Select the camera and video quality you want to use for recording.
+                </p>
+                
+                <div class="device-selector">
+                    <label class="form-label">
+                        <i class="fas fa-camera"></i>
+                        Select Camera
+                    </label>
+                    <select id="cameraSelect" class="device-select">
+                        <option value="">Loading cameras...</option>
+                    </select>
+                </div>
+                
+                <div class="camera-controls">
+                    <button id="flipCameraBtn" class="btn btn-secondary" style="margin-bottom: 20px;">
+                        <i class="fas fa-sync-alt"></i>
+                        Flip Camera
+                    </button>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">
+                        <i class="fas fa-video"></i>
+                        Video Quality
+                    </label>
+                    <div class="quality-selector">
+                        <button class="quality-btn active" data-quality="high">
+                            <i class="fas fa-star"></i>
+                            High (1080p)
+                        </button>
+                        <button class="quality-btn" data-quality="medium">
+                            <i class="fas fa-video"></i>
+                            Medium (720p)
+                        </button>
+                        <button class="quality-btn" data-quality="low">
+                            <i class="fas fa-mobile-alt"></i>
+                            Low (480p)
+                        </button>
+                    </div>
+                    <div class="help-text">
+                        <i class="fas fa-info-circle"></i>
+                        Higher quality uses more storage but provides better video clarity.
+                    </div>
+                </div>
+
+                <div id="lightingControls" class="form-group" style="display: none;">
+                    <h3 class="step-title" style="font-size: 1.2rem; margin-bottom: 15px;">
+                        <i class="fas fa-sun"></i>
+                        Exposure & Color
+                    </h3>
+                    <div class="form-group">
+                        <label class="form-label">
+                            <i class="fas fa-tachometer-alt"></i>
+                            Exposure Compensation
+                        </label>
+                        <input type="range" id="exposureSlider" class="form-input" style="padding: 2px;">
+                        <span id="exposureValue">0</span>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">
+                            <i class="fas fa-palette"></i>
+                            White Balance
+                        </label>
+                        <select id="whiteBalanceSelect" class="device-select"></select>
+                    </div>
+                </div>
+                
+                <div id="cameraContainer" class="camera-container">
+                    <video id="videoPreview" autoplay playsinline muted></video>
+                    <div id="countdownDisplay" class="countdown-overlay">10</div>
+                    <div id="recordingIndicator" class="recording-indicator" style="display: none;">
+                        <div class="recording-dot"></div>
+                        <span>REC</span>
+                        <div class="recording-timer">00:00</div>
+                    </div>
+                    <div class="camera-overlay">
+                        <div id="cameraStatus">Camera ready</div>
+                        <button id="fullscreenBtn" class="btn fullscreen-btn" style="display: none; min-width: auto; padding: 1px 10px 5px 10px;">
+                            <i class="fas fa-expand"></i>
+                        </button>
+                    </div>
+                    <button id="stopRecordingFullscreenBtn" class="btn btn-danger stop-recording-fullscreen" style="display: none;">
+                        <i class="fas fa-square"></i> Stop Recording
+                    </button>
+                </div>
+                
+                <div class="action-buttons">
+                    <button id="backToStep1" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i>
+                        Back
+                    </button>
+                    <button id="startRecordingBtn" class="btn btn-danger">
+                        <i class="fas fa-circle"></i>
+                        Start Recording
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Step 3: Recording & Save -->
+            <div id="step3" class="step-container">
+                <h2 class="step-title">
+                    <i class="fas fa-save"></i>
+                    Save & Share
+                </h2>
+                <p class="step-description">
+                    Your video has been encrypted and saved. You can now share it or record another video.
+                </p>
+                
+                <div id="saveStatus" class="status-message status-success">
+                    <i class="fas fa-check-circle"></i>
+                    <strong>Video encrypted and saved successfully!</strong>
+                    <p>Your video is now securely stored with military-grade encryption.</p>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">
+                        <i class="fas fa-file-video"></i>
+                        File Name
+                    </label>
+                    <input type="text" id="fileName" class="form-input" placeholder="Enter a name for your video">
+                    <div class="help-text">
+                        <i class="fas fa-info-circle"></i>
+                        Video will be saved with .encvideo extension
+                    </div>
+                </div>
+                
+                <div class="action-buttons">
+                    <button id="shareFileBtn" class="btn btn-primary">
+                        <i class="fas fa-share-alt"></i>
+                        Share File <small>Beta</small>
+                    </button>
+                    <button id="newRecordingBtn" class="btn btn-secondary">
+                        <i class="fas fa-video"></i>
+                        New Recording
+                    </button>
+                    <button id="viewFilesBtn" class="btn btn-success">
+                        <i class="fas fa-folder"></i>
+                        View Files
+                    </button>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Playback View -->
+        <section id="playView" class="view">
+            <h2 class="step-title">
+                <i class="fas fa-play-circle"></i>
+                Play Encrypted Video
+            </h2>
+            <p class="step-description">
+                Select an encrypted video file and enter the two keys used during recording to decrypt and play it.
+            </p>
+            
+            <div class="form-group">
+                <label class="form-label">
+                    <i class="fas fa-file-video"></i>
+                    Select Encrypted Video
+                </label>
+                <div class="input-with-icon">
+                    <input type="text" id="selectedFile" class="form-input" placeholder="No file selected" readonly>
+                    <button id="browseFileBtn" class="btn btn-primary" style="position: absolute; right: 5px; top: 5px; padding: 8px 15px;">
+                        <i class="fas fa-folder-open"></i>
+                        Browse
+                    </button>
+                </div>
+                <div class="help-text">
+                    <i class="fas fa-info-circle"></i>
+                    Only .encvideo files encrypted with this app can be played
+                </div>
+                <div id="fileError" class="error-message">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <span></span>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">
+                    <i class="fas fa-key"></i>
+                    Master Key
+                </label>
+                <div class="input-with-icon">
+                    <input type="password" id="playMasterKey" class="form-input" placeholder="Enter master key used during recording" autocomplete="off">
+                    <button type="button" class="password-toggle" data-target="playMasterKey">
+                        <i class="fas fa-eye"></i>
+                    </button>
+                </div>
+                <div id="playMasterKeyError" class="error-message">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <span></span>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">
+                    <i class="fas fa-lock"></i>
+                    Secure Key
+                </label>
+                <div class="input-with-icon">
+                    <input type="password" id="playSecureKey" class="form-input" placeholder="Enter secure key used during recording" autocomplete="off">
+                    <button type="button" class="password-toggle" data-target="playSecureKey">
+                        <i class="fas fa-eye"></i>
+                    </button>
+                </div>
+                <div id="playSecureKeyError" class="error-message">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <span></span>
+                </div>
+            </div>
+            
+            <div class="camera-container">
+                <video id="playbackVideo" controls playsinline></video>
+            </div>
+            
+            <div id="playbackStatus" class="status-message" style="display: none;"></div>
+            
+            <div class="action-buttons">
+                <button id="decryptAndPlayBtn" class="btn btn-primary" disabled>
+                    <i class="fas fa-play"></i>
+                    Decrypt & Play
+                </button>
+                <button id="clearPlaybackBtn" class="btn btn-secondary">
+                    <i class="fas fa-times"></i>
+                    Clear
+                </button>
+            </div>
+        </section>
+        
+        <!-- Files View -->
+        <section id="filesView" class="view">
+            <h2 class="step-title">
+                <i class="fas fa-folder"></i>
+                My Encrypted Videos <small>Beta</small>
+            </h2>
+            <p class="step-description">
+                Manage your encrypted video files. Files are stored locally on your device.
+            </p>
+            
+            <div id="filesList" class="file-list">
+                <div class="empty-state">
+                    <i class="fas fa-folder-open"></i>
+                    <h3>No encrypted videos found</h3>
+                    <p>Record your first encrypted video to see it here</p>
+                </div>
+            </div>
+            
+            <div class="action-buttons">
+                <button id="refreshFilesBtn" class="btn btn-primary">
+                    <i class="fas fa-sync-alt"></i>
+                    Refresh Files
+                </button>
+                <button id="recordFromFilesBtn" class="btn btn-success">
+                    <i class="fas fa-video"></i>
+                    New Recording
+                </button>
+            </div>
+        </section>
+        
+        <footer>
+            <p>SecureVideo Vault &copy; 4 March 1986 1.00 PM | Military-grade encryption | All videos stored locally on your device</p>
+            <p id="storageStatus">Checking storage availability...</p>
+        </footer>
+    </div>
+
+    <script>
+        // PWA Installation
+        let deferredPrompt;
+        const installButton = document.getElementById('installButton');
+        
+        // Detect iOS
+        const isIos = /iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase());
+        const isInStandaloneMode = ('standalone' in window.navigator) && (window.navigator.standalone);
+        
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            installButton.classList.remove('hidden');
+        });
+        
+        // Show install button on iOS (since beforeinstallprompt doesn't fire)
+        if (isIos && !isInStandaloneMode) {
+            installButton.classList.remove('hidden');
+        }
+        
+        installButton.addEventListener('click', async () => {
+            if (isIos) {
+                alert('To install on iOS:\n\n1. Tap the Share button in your browser toolbar\n2. Scroll down and tap "Add to Home Screen"');
+                return;
+            }
+
+            if (!deferredPrompt) return;
+            
+            deferredPrompt.prompt();
+            const { outcome } = await deferredPrompt.userChoice;
+            
+            if (outcome === 'accepted') {
+                installButton.classList.add('hidden');
+            }
+            
+            deferredPrompt = null;
+        });
+        
+        // App State
+        const appState = {
+            currentStep: 1,
+            isRecording: false,
+            mediaRecorder: null,
+            writableStream: null,
+            recordingTimer: null,
+            recordingStartTime: null,
+            cameras: [],
+            currentCamera: null,
+            videoQuality: 'high',
+            masterKey: '',
+            secureKey: '',
+            encryptedFileHandle: null,
+            currentFile: null
+        };
+        
+        // DOM Elements
+        const views = {
+            record: document.getElementById('recordView'),
+            play: document.getElementById('playView'),
+            files: document.getElementById('filesView')
+        };
+        
+        const navButtons = document.querySelectorAll('.nav-btn');
+        const stepContainers = document.querySelectorAll('.step-container');
+        const steps = document.querySelectorAll('.step');
+        const stepLines = document.querySelectorAll('.step-line');
+        
+        // Navigation
+        navButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                const view = button.getAttribute('data-view');
+                
+                // Update active nav button
+                navButtons.forEach(btn => btn.classList.remove('active'));
+                button.classList.add('active');
+                
+                // Show selected view
+                Object.values(views).forEach(v => v.classList.remove('active'));
+                views[view].classList.add('active');
+                
+                // If switching to files view, refresh the list
+                if (view === 'files') {
+                    refreshFilesList();
+                }
+            });
+        });
+        
+        // Step Navigation
+        function goToStep(step) {
+            if (step < 1 || step > 3) return;
+            
+            appState.currentStep = step;
+            
+            // Update step indicators
+            steps.forEach((s, index) => {
+                if (index + 1 === step) {
+                    s.classList.add('active');
+                } else if (index + 1 < step) {
+                    s.classList.remove('active');
+                    s.classList.add('completed');
+                } else {
+                    s.classList.remove('active', 'completed');
+                }
+            });
+            
+            // Update step lines
+            stepLines.forEach((line, index) => {
+                if (index + 1 < step) {
+                    line.classList.add('completed');
+                } else {
+                    line.classList.remove('completed');
+                }
+            });
+            
+            // Show/hide step containers
+            stepContainers.forEach(container => {
+                if (parseInt(container.id.replace('step', '')) === step) {
+                    container.classList.add('active');
+                } else {
+                    container.classList.remove('active');
+                }
+            });
+            
+            // Special handling for step 2
+            if (step === 2) {
+                initializeCameraPreview();
+            }
+        }
+        
+        // Password strength checker
+        function checkPasswordStrength(password) {
+            if (!password) return 'empty';
+            
+            let strength = 0;
+            
+            // Length check
+            if (password.length >= 8) strength++;
+            if (password.length >= 12) strength++;
+            
+            // Character variety checks
+            if (/[A-Z]/.test(password)) strength++;
+            if (/[0-9]/.test(password)) strength++;
+            if (/[^A-Za-z0-9]/.test(password)) strength++;
+            
+            if (strength <= 2) return 'weak';
+            if (strength <= 4) return 'medium';
+            return 'strong';
+        }
+        
+        // Update password strength indicator
+        function updatePasswordStrengthIndicator(inputId, indicatorId) {
+            const input = document.getElementById(inputId);
+            const indicator = document.getElementById(indicatorId);
+            
+            input.addEventListener('input', function() {
+                const strength = checkPasswordStrength(this.value);
+                indicator.className = 'password-strength ' + strength;
+            });
+        }
+        
+        // Initialize password strength indicators
+        updatePasswordStrengthIndicator('masterKey', 'masterKeyStrength');
+        updatePasswordStrengthIndicator('secureKey', 'secureKeyStrength');
+        
+        // Password visibility toggle
+        document.querySelectorAll('.password-toggle').forEach(button => {
+            button.addEventListener('click', function() {
+                const targetId = this.getAttribute('data-target');
+                const input = document.getElementById(targetId);
+                const icon = this.querySelector('i');
+                
+                if (input.type === 'password') {
+                    input.type = 'text';
+                    icon.className = 'fas fa-eye-slash';
+                } else {
+                    input.type = 'password';
+                    icon.className = 'fas fa-eye';
+                }
+            });
+        });
+        
+        // Step 1: Password validation and next step
+        document.getElementById('nextToStep2').addEventListener('click', async () => {
+            const masterKey = document.getElementById('masterKey').value;
+            const secureKey = document.getElementById('secureKey').value;
+            const masterKeyError = document.getElementById('masterKeyError');
+            const secureKeyError = document.getElementById('secureKeyError');
+            
+            let isValid = true;
+            
+            // Validate master key
+            if (masterKey.length < 8) {
+                masterKeyError.querySelector('span').textContent = 'Master key must be at least 8 characters';
+                masterKeyError.classList.add('show');
+                isValid = false;
+            } else {
+                masterKeyError.classList.remove('show');
+            }
+            
+            // Validate secure key
+            if (secureKey.length < 8) {
+                secureKeyError.querySelector('span').textContent = 'Secure key must be at least 8 characters';
+                secureKeyError.classList.add('show');
+                isValid = false;
+            } else {
+                secureKeyError.classList.remove('show');
+            }
+            
+            // Check if passwords are the same (should be different for security)
+            if (masterKey === secureKey) {
+                secureKeyError.querySelector('span').textContent = 'Master key and secure key should be different for better security';
+                secureKeyError.classList.add('show');
+                isValid = false;
+            }
+            
+            if (isValid) {
+                appState.masterKey = masterKey;
+                appState.secureKey = secureKey;
+
+                // New: Prompt for file handle before proceeding
+                if ('showSaveFilePicker' in window) {
+                    try {
+                        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                        const defaultName = `secure_video_${timestamp}.encvideo`;
+
+                        const handle = await window.showSaveFilePicker({
+                            suggestedName: defaultName,
+                            types: [{
+                                description: 'Encrypted Video File',
+                                accept: { 'application/octet-stream': ['.encvideo'] }
+                            }]
+                        });
+                        appState.encryptedFileHandle = handle;
+                        goToStep(2);
+                    } catch (error) {
+                        if (error.name !== 'AbortError') {
+                            console.error('File picker error:', error);
+                            showError('Could not get file location. Please try again.');
+                        }
+                        // If user aborts, do nothing, stay on step 1.
+                    }
+                } else {
+                    showError('Your browser does not support the File System Access API, which is required for this feature.');
+                }
+            }
+        });
+        
+        // Step 1: Back button
+        document.getElementById('backToStep1').addEventListener('click', () => {
+            goToStep(1);
+        });
+        
+        // Camera permission request
+        document.getElementById('requestCameraBtn').addEventListener('click', async () => {
+            try {
+                await initializeCameraPreview();
+                updatePermissionStatus(true, 'Camera permission granted');
+            } catch (error) {
+                updatePermissionStatus(false, 'Camera permission denied');
+                showError('Please enable camera access in your browser settings');
+            }
+        });
+        
+        // Update permission status display
+        function updatePermissionStatus(granted, message) {
+            const icon = document.getElementById('cameraPermissionIcon');
+            const text = document.getElementById('cameraPermissionText');
+            
+            if (granted) {
+                icon.className = 'fas fa-video permission-granted permission-icon';
+                text.textContent = message;
+            } else {
+                icon.className = 'fas fa-video permission-denied permission-icon';
+                text.textContent = message;
+            }
+        }
+        
+        // Camera initialization
+        async function initializeCameraPreview() {
+            try {
+                const videoPreview = document.getElementById('videoPreview');
+                
+                // Get camera access
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: {
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 },
+                        facingMode: { ideal: 'environment' }
+                    }, 
+                    audio: true 
+                });
+                
+                videoPreview.srcObject = stream;
+                
+                // Update permission status
+                updatePermissionStatus(true, 'Camera permission granted');
+                
+                // Hide permission check
+                document.getElementById('permissionCheck').style.display = 'none';
+                
+                // Get available cameras
+                await loadCameraDevices();
+
+                // Update lighting controls
+                await updateLightingControls(stream);
+                
+                return stream;
+            } catch (error) {
+                console.error('Camera initialization error:', error);
+                updatePermissionStatus(false, 'Camera permission denied or error');
+                throw error;
+            }
+        }
+        
+        // Load camera devices
+        async function loadCameraDevices() {
+            try {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const videoDevices = devices.filter(device => device.kind === 'videoinput');
+                
+                const cameraSelect = document.getElementById('cameraSelect');
+                cameraSelect.innerHTML = '';
+                
+                videoDevices.forEach((device, index) => {
+                    const option = document.createElement('option');
+                    option.value = device.deviceId;
+                    option.text = device.label || `Camera ${index + 1}`;
+                    cameraSelect.appendChild(option);
+                });
+                
+                appState.cameras = videoDevices;
+                
+                // Set active camera based on current stream
+                const videoPreview = document.getElementById('videoPreview');
+                const stream = videoPreview.srcObject;
+                let activeDeviceId = null;
+                
+                if (stream) {
+                    const track = stream.getVideoTracks()[0];
+                    if (track) {
+                        const settings = track.getSettings();
+                        activeDeviceId = settings.deviceId;
+                    }
+                }
+
+                if (activeDeviceId && videoDevices.find(d => d.deviceId === activeDeviceId)) {
+                    appState.currentCamera = activeDeviceId;
+                    cameraSelect.value = activeDeviceId;
+                } else if (videoDevices.length > 0) {
+                    appState.currentCamera = videoDevices[0].deviceId;
+                }
+            } catch (error) {
+                console.error('Error loading camera devices:', error);
+            }
+        }
+        
+        // Camera device change
+        document.getElementById('cameraSelect').addEventListener('change', async function() {
+            const deviceId = this.value;
+            await switchCamera(deviceId);
+        });
+
+        // Flip camera
+        document.getElementById('flipCameraBtn').addEventListener('click', () => {
+            document.getElementById('videoPreview').classList.toggle('flipped');
+        });
+        
+        
+        // Switch camera
+        async function switchCamera(deviceId) {
+            try {
+                const videoPreview = document.getElementById('videoPreview');
+                const currentStream = videoPreview.srcObject;
+                
+                // Stop current stream tracks
+                if (currentStream) {
+                    currentStream.getTracks().forEach(track => track.stop());
+                }
+                
+                // Get new stream with selected camera
+                const constraints = {
+                    video: { 
+                        deviceId: { exact: deviceId },
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 }
+                    },
+                    audio: true
+                };
+                
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                videoPreview.srcObject = stream;
+                appState.currentCamera = deviceId;
+
+                // Update lighting controls
+                await updateLightingControls(stream);
+            } catch (error) {
+                console.error('Error switching camera:', error);
+                showError('Failed to switch camera. Please try again.');
+            }
+        }
+        
+        // Video quality selection
+        document.querySelectorAll('.quality-btn').forEach(button => {
+            button.addEventListener('click', function() {
+                document.querySelectorAll('.quality-btn').forEach(btn => btn.classList.remove('active'));
+                this.classList.add('active');
+                appState.videoQuality = this.getAttribute('data-quality');
+            });
+        });
+        
+        // Get video quality constraints
+        function getVideoConstraints() {
+            switch(appState.videoQuality) {
+                case 'high':
+                    return { width: { ideal: 1920 }, height: { ideal: 1080 } };
+                case 'medium':
+                    return { width: { ideal: 1280 }, height: { ideal: 720 } };
+                case 'low':
+                    return { width: { ideal: 854 }, height: { ideal: 480 } };
+                default:
+                    return { width: { ideal: 1280 }, height: { ideal: 720 } };
+            }
+        }
+
+        // Update lighting controls based on camera capabilities
+        async function updateLightingControls(stream) {
+            const lightingControls = document.getElementById('lightingControls');
+            const exposureSlider = document.getElementById('exposureSlider');
+            const exposureValue = document.getElementById('exposureValue');
+            const whiteBalanceSelect = document.getElementById('whiteBalanceSelect');
+
+            const [track] = stream.getVideoTracks();
+            if (!track) return;
+
+            const capabilities = track.getCapabilities();
+            let showControls = false;
+
+            // Check for exposure capabilities
+            if (capabilities.exposureCompensation) {
+                const { min, max, step } = capabilities.exposureCompensation;
+                exposureSlider.min = min;
+                exposureSlider.max = max;
+                exposureSlider.step = step;
+                exposureSlider.value = track.getSettings().exposureCompensation || 0;
+                exposureValue.textContent = exposureSlider.value;
+                exposureSlider.parentElement.style.display = 'block';
+                showControls = true;
+            } else {
+                exposureSlider.parentElement.style.display = 'none';
+            }
+
+            // Check for white balance capabilities
+            if (capabilities.whiteBalanceMode && capabilities.whiteBalanceMode.length > 0) {
+                whiteBalanceSelect.innerHTML = '';
+                capabilities.whiteBalanceMode.forEach(mode => {
+                    const option = document.createElement('option');
+                    option.value = mode;
+                    option.text = mode.charAt(0).toUpperCase() + mode.slice(1);
+                    whiteBalanceSelect.appendChild(option);
+                });
+                whiteBalanceSelect.value = track.getSettings().whiteBalanceMode || 'continuous';
+                whiteBalanceSelect.parentElement.style.display = 'block';
+                showControls = true;
+            } else {
+                whiteBalanceSelect.parentElement.style.display = 'none';
+            }
+
+            lightingControls.style.display = showControls ? 'block' : 'none';
+        }
+
+        // Apply lighting constraints
+        document.getElementById('exposureSlider').addEventListener('input', async (event) => {
+            const value = event.target.value;
+            document.getElementById('exposureValue').textContent = value;
+            const stream = document.getElementById('videoPreview').srcObject;
+            if (stream) {
+                const [track] = stream.getVideoTracks();
+                try {
+                    await track.applyConstraints({ advanced: [{ exposureCompensation: value }] });
+                } catch (error) {
+                    console.error('Error applying exposure:', error);
+                }
+            }
+        });
+
+        document.getElementById('whiteBalanceSelect').addEventListener('change', async (event) => {
+            const value = event.target.value;
+            const stream = document.getElementById('videoPreview').srcObject;
+            if (stream) {
+                const [track] = stream.getVideoTracks();
+                try {
+                    await track.applyConstraints({ advanced: [{ whiteBalanceMode: value }] });
+                } catch (error) {
+                    console.error('Error applying white balance:', error);
+                }
+            }
+        });
+        
+        // Audio Helper
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playBeep(freq = 440, duration = 0.1, type = 'sine') {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.frequency.value = freq;
+            osc.type = type;
+            osc.start();
+            gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + duration);
+            osc.stop(audioCtx.currentTime + duration);
+        }
+
+        // Start/Stop recording
+        document.getElementById('startRecordingBtn').addEventListener('click', async () => {
+            if (appState.isRecording) {
+                stopRecording();
+            } else {
+                // Enter fullscreen immediately
+                const cameraContainer = document.getElementById('cameraContainer');
+                try {
+                    if (cameraContainer.requestFullscreen) {
+                        await cameraContainer.requestFullscreen();
+                    } else if (cameraContainer.webkitRequestFullscreen) {
+                        await cameraContainer.webkitRequestFullscreen();
+                    } else if (cameraContainer.mozRequestFullScreen) {
+                        await cameraContainer.mozRequestFullScreen();
+                    } else if (cameraContainer.msRequestFullscreen) {
+                        await cameraContainer.msRequestFullscreen();
+                    }
+                } catch (err) {
+                    console.log('Fullscreen request failed:', err);
+                }
+                
+                startCountdown();
+            }
+        });
+
+        // Countdown Logic
+        function startCountdown() {
+            const overlay = document.getElementById('countdownDisplay');
+            const startBtn = document.getElementById('startRecordingBtn');
+            let count = 10;
+            
+            // Prepare keys in background to avoid freeze
+            appState.preparationPromise = (async () => {
+                const salt = crypto.getRandomValues(new Uint8Array(16));
+                const keyMaterial = await crypto.subtle.importKey(
+                    'raw',
+                    new TextEncoder().encode(appState.masterKey + appState.secureKey),
+                    { name: 'PBKDF2' },
+                    false,
+                    ['deriveKey']
+                );
+                
+                const encryptionKey = await crypto.subtle.deriveKey(
+                    {
+                        name: 'PBKDF2',
+                        salt: salt,
+                        iterations: 100000,
+                        hash: 'SHA-256'
+                    },
+                    keyMaterial,
+                    { name: 'AES-GCM', length: 256 },
+                    false,
+                    ['encrypt']
+                );
+                return { salt, encryptionKey };
+            })();
+
+            // Disable start button during countdown
+            startBtn.disabled = true;
+            
+            // Show overlay
+            overlay.classList.add('active');
+            overlay.textContent = count;
+            playBeep(440, 0.1); // Initial beep
+
+            const timer = setInterval(() => {
+                count--;
+                if (count > 0) {
+                    overlay.textContent = count;
+                    playBeep(440, 0.1);
+                } else {
+                    clearInterval(timer);
+                    overlay.textContent = "GO!";
+                    playBeep(880, 0.3, 'square'); // Special sound
+                    
+                    setTimeout(() => {
+                        overlay.classList.remove('active');
+                        startBtn.disabled = false;
+                        startRecordingActual();
+                    }, 500);
+                }
+            }, 1000);
+        }
+
+        async function startRecordingActual() {
+            try {
+                const videoPreview = document.getElementById('videoPreview');
+                const stream = videoPreview.srcObject;
+                
+                if (!stream) {
+                    showError('Camera not initialized. Please check camera permissions.');
+                    return;
+                }
+
+                if (!appState.encryptedFileHandle) {
+                    showError('File location not set. Please go back and select a file.');
+                    return;
+                }
+
+                // Retrieve pre-calculated keys
+                if (!appState.preparationPromise) {
+                    throw new Error('Encryption preparation failed');
+                }
+                const { salt, encryptionKey } = await appState.preparationPromise;
+
+                appState.encryptionKey = encryptionKey; // Store for streaming
+
+                // Create a writable stream.
+                appState.writableStream = await appState.encryptedFileHandle.createWritable();
+                
+                // Initialize Write Queue to serialize writes
+                appState.writeQueue = Promise.resolve();
+                
+                // Write File Header (Salt)
+                await appState.writableStream.write(salt);
+
+                // Get mime type based on browser support
+                const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') 
+                    ? 'video/webm;codecs=vp9'
+                    : MediaRecorder.isTypeSupported('video/webm;codecs=vp8')
+                    ? 'video/webm;codecs=vp8'
+                    : 'video/webm';
+                
+                // Create media recorder
+                appState.mediaRecorder = new MediaRecorder(stream, { mimeType });
+                
+                // Streaming Encryption Handler
+                appState.mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) {
+                        // Chain the async operation to the queue
+                        appState.writeQueue = appState.writeQueue.then(async () => {
+                             if (!appState.writableStream) return;
+                             
+                             try {
+                                const chunkData = await event.data.arrayBuffer();
+                                const iv = crypto.getRandomValues(new Uint8Array(12));
+                                
+                                const encryptedChunk = await crypto.subtle.encrypt(
+                                    { name: 'AES-GCM', iv: iv },
+                                    appState.encryptionKey,
+                                    chunkData
+                                );
+
+                                // Format: [Type(1)][IV(12)][Len(4)][Data]
+                                // Type 1: Video Chunk
+                                const type = new Uint8Array([1]); 
+                                const len = new Uint8Array(4);
+                                new DataView(len.buffer).setUint32(0, encryptedChunk.byteLength, true); // Little Endian
+
+                                await appState.writableStream.write(type);
+                                await appState.writableStream.write(iv);
+                                await appState.writableStream.write(len);
+                                await appState.writableStream.write(encryptedChunk);
+
+                            } catch (err) {
+                                console.error('Streaming encryption error:', err);
+                            }
+                        });
+                    }
+                };
+                
+                // Handle recording stop
+                appState.mediaRecorder.onstop = async () => {
+                    try {
+                        // Wait for all pending writes to finish!
+                        await appState.writeQueue;
+
+                        if (appState.writableStream) {
+                            // Write Footer Chunk (Type 2)
+                            const duration = Date.now() - appState.recordingStartTime;
+                            const footerData = new TextEncoder().encode(JSON.stringify({
+                                duration: duration,
+                                timestamp: Date.now(),
+                                quality: appState.videoQuality
+                            }));
+
+                            const iv = crypto.getRandomValues(new Uint8Array(12));
+                            const encryptedFooter = await crypto.subtle.encrypt(
+                                { name: 'AES-GCM', iv: iv },
+                                appState.encryptionKey,
+                                footerData
+                            );
+
+                            const type = new Uint8Array([2]); // Type 2: Footer
+                            const len = new Uint8Array(4);
+                            new DataView(len.buffer).setUint32(0, encryptedFooter.byteLength, true);
+
+                            await appState.writableStream.write(type);
+                            await appState.writableStream.write(iv);
+                            await appState.writableStream.write(len);
+                            await appState.writableStream.write(encryptedFooter);
+
+                            await appState.writableStream.close();
+                            appState.writableStream = null;
+                        }
+
+                        showStatus('Video encrypted and saved successfully!', 'success');
+                        
+                        // Update UI
+                        document.getElementById('recordingIndicator').style.display = 'none';
+                        const startBtn = document.getElementById('startRecordingBtn');
+                        startBtn.innerHTML = '<i class="fas fa-circle"></i> Start Recording';
+                        startBtn.classList.remove('btn-warning');
+                        startBtn.classList.add('btn-danger');
+                        startBtn.disabled = false;
+                        
+                        const fullscreenStopBtn = document.getElementById('stopRecordingFullscreenBtn');
+                        if (fullscreenStopBtn) {
+                            fullscreenStopBtn.innerHTML = '<i class="fas fa-square"></i> Stop Recording';
+                            fullscreenStopBtn.disabled = false;
+                        }
+                        
+                        document.getElementById('cameraStatus').textContent = 'Camera ready';
+                        document.getElementById('fullscreenBtn').style.display = 'none';
+
+                        goToStep(3);
+
+                    } catch (error) {
+                        console.error('Stop recording error:', error);
+                        showError('Error saving video: ' + error.message);
+                    }
+                };
+                
+                // Start recording
+                appState.mediaRecorder.start(1000); // 1-second chunks
+                appState.isRecording = true;
+                appState.recordingStartTime = Date.now();
+                
+                // Update UI
+                document.getElementById('recordingIndicator').style.display = 'flex';
+                document.getElementById('startRecordingBtn').innerHTML = '<i class="fas fa-square"></i> Stop Recording';
+                document.getElementById('startRecordingBtn').classList.remove('btn-danger');
+                document.getElementById('startRecordingBtn').classList.add('btn-warning');
+                document.getElementById('cameraStatus').textContent = 'Recording (Secure Stream)...';
+                document.getElementById('fullscreenBtn').style.display = 'block';
+                
+                startRecordingTimer();
+                
+            } catch (error) {
+                console.error('Recording error:', error);
+                showError('Failed to start recording: ' + error.message);
+            }
+        }
+
+        // Fullscreen logic
+        const fullscreenBtn = document.getElementById('fullscreenBtn');
+        
+        fullscreenBtn.addEventListener('click', () => {
+            const cameraContainer = document.getElementById('cameraContainer');
+            
+            // robustly check if we are in fullscreen mode
+            const isFullscreen = document.fullscreenElement || 
+                               document.webkitFullscreenElement || 
+                               document.mozFullScreenElement || 
+                               document.msFullscreenElement;
+            
+            if (isFullscreen) {
+                // Exit fullscreen
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                } else if (document.webkitExitFullscreen) { 
+                    document.webkitExitFullscreen();
+                } else if (document.mozCancelFullScreen) {
+                    document.mozCancelFullScreen();
+                } else if (document.msExitFullscreen) { 
+                    document.msExitFullscreen();
+                }
+            } else {
+                // Enter fullscreen
+                if (cameraContainer.requestFullscreen) {
+                    cameraContainer.requestFullscreen();
+                } else if (cameraContainer.webkitRequestFullscreen) { 
+                    cameraContainer.webkitRequestFullscreen();
+                } else if (cameraContainer.mozRequestFullScreen) {
+                    cameraContainer.mozRequestFullScreen();
+                } else if (cameraContainer.msRequestFullscreen) { 
+                    cameraContainer.msRequestFullscreen();
+                }
+            }
+        });
+
+        function updateFullscreenIcon() {
+            const stopBtn = document.getElementById('stopRecordingFullscreenBtn');
+            const icon = fullscreenBtn.querySelector('i');
+            
+            const isFullscreen = document.fullscreenElement || 
+                               document.webkitFullscreenElement || 
+                               document.mozFullScreenElement || 
+                               document.msFullscreenElement;
+            
+            if (isFullscreen) {
+                stopBtn.style.display = 'block';
+                icon.classList.remove('fa-expand');
+                icon.classList.add('fa-compress');
+            } else {
+                stopBtn.style.display = 'none';
+                icon.classList.remove('fa-compress');
+                icon.classList.add('fa-expand');
+            }
+        }
+
+        document.addEventListener('fullscreenchange', updateFullscreenIcon);
+        document.addEventListener('webkitfullscreenchange', updateFullscreenIcon);
+        document.addEventListener('mozfullscreenchange', updateFullscreenIcon);
+        document.addEventListener('MSFullscreenChange', updateFullscreenIcon);
+
+        document.getElementById('stopRecordingFullscreenBtn').addEventListener('click', () => {
+            stopRecording();
+            if (document.exitFullscreen) {
+                document.exitFullscreen();
+            } else if (document.webkitExitFullscreen) { /* Safari */
+                document.webkitExitFullscreen();
+            } else if (document.msExitFullscreen) { /* IE11 */
+                document.msExitFullscreen();
+            }
+        });
+        
+        // Stop recording with countdown
+        function stopRecording() {
+            if (appState.mediaRecorder && appState.isRecording && !appState.isStopping) {
+                appState.isStopping = true;
+                const btn = document.getElementById('startRecordingBtn');
+                const fullscreenStopBtn = document.getElementById('stopRecordingFullscreenBtn');
+                
+                let countdown = 3;
+                
+                // Disable buttons
+                btn.disabled = true;
+                if (fullscreenStopBtn) fullscreenStopBtn.disabled = true;
+                
+                const updateBtnText = (text) => {
+                    btn.innerHTML = `<i class="fas fa-circle-notch fa-spin"></i> ${text}`;
+                    if (fullscreenStopBtn) fullscreenStopBtn.innerHTML = `<i class="fas fa-circle-notch fa-spin"></i> ${text}`;
+                };
+
+                updateBtnText(`Finishing... ${countdown}`);
+
+                const stopInterval = setInterval(() => {
+                    countdown--;
+                    if (countdown > 0) {
+                        updateBtnText(`Finishing... ${countdown}`);
+                    } else {
+                        clearInterval(stopInterval);
+                        updateBtnText('Saving...');
+                        appState.mediaRecorder.stop();
+                        appState.isRecording = false;
+                        appState.isStopping = false; // Reset flag
+                        
+                        // Stop timer
+                        clearInterval(appState.recordingTimer);
+                    }
+                }, 1000);
+            }
+        }
+        
+        // Recording timer
+        function startRecordingTimer() {
+            const timerElement = document.querySelector('.recording-timer');
+            
+            appState.recordingTimer = setInterval(() => {
+                const elapsed = Date.now() - appState.recordingStartTime;
+                const seconds = Math.floor(elapsed / 1000);
+                const minutes = Math.floor(seconds / 60);
+                const displaySeconds = seconds % 60;
+                
+                timerElement.textContent = `${minutes.toString().padStart(2, '0')}:${displaySeconds.toString().padStart(2, '0')}`;
+            }, 1000);
+        }
+        
+
+        
+        // Share file
+        document.getElementById('shareFileBtn').addEventListener('click', async () => {
+            if (appState.encryptedFileHandle && 'share' in navigator) {
+                try {
+                    const file = await appState.encryptedFileHandle.getFile();
+                    await navigator.share({
+                        title: 'Encrypted Video',
+                        text: 'Check out this encrypted video',
+                        files: [file]
+                    });
+                } catch (error) {
+                    console.error('Share error:', error);
+                }
+            } else {
+                showError('Sharing is not supported or file not available');
+            }
+        });
+        
+        // New recording from step 3
+        document.getElementById('newRecordingBtn').addEventListener('click', () => {
+            // Reset form
+            document.getElementById('masterKey').value = '';
+            document.getElementById('secureKey').value = '';
+            document.getElementById('fileName').value = '';
+            
+            // Reset state
+            appState.masterKey = '';
+            appState.secureKey = '';
+            appState.encryptedFileHandle = null;
+            
+            // Go back to step 1
+            goToStep(1);
+        });
+        
+        // View files from step 3
+        document.getElementById('viewFilesBtn').addEventListener('click', () => {
+            // Switch to files view
+            navButtons.forEach(btn => btn.classList.remove('active'));
+            document.querySelector('[data-view="files"]').classList.add('active');
+            
+            Object.values(views).forEach(v => v.classList.remove('active'));
+            views.files.classList.add('active');
+            
+            // Refresh files list
+            refreshFilesList();
+        });
+        
+        // Playback: Browse for file
+        document.getElementById('browseFileBtn').addEventListener('click', async () => {
+            try {
+                const [fileHandle] = await window.showOpenFilePicker({
+                    types: [{
+                        description: 'Encrypted Video Files',
+                        accept: { 'application/octet-stream': ['.encvideo'] }
+                    }],
+                    multiple: false
+                });
+                
+                const file = await fileHandle.getFile();
+                appState.currentFile = file;
+                
+                document.getElementById('selectedFile').value = file.name;
+                document.getElementById('decryptAndPlayBtn').disabled = false;
+                
+            } catch (error) {
+                if (error.name !== 'AbortError') {
+                    console.error('File selection error:', error);
+                    showError('Failed to select file');
+                }
+            }
+        });
+        
+        // Playback: Decrypt and play
+        document.getElementById('decryptAndPlayBtn').addEventListener('click', async () => {
+            if (!appState.currentFile) {
+                showError('Please select a file first');
+                return;
+            }
+            
+            const masterKey = document.getElementById('playMasterKey').value;
+            const secureKey = document.getElementById('playSecureKey').value;
+            
+            if (!masterKey || !secureKey) {
+                showError('Please enter both keys');
+                return;
+            }
+            
+            try {
+                showStatus('Decrypting streaming video...', 'info');
+                
+                const fileBuffer = await appState.currentFile.arrayBuffer();
+                const dataView = new DataView(fileBuffer);
+                let offset = 0;
+
+                // 1. Read Salt (16 bytes)
+                if (fileBuffer.byteLength < 16) throw new Error('Invalid file: too short');
+                const salt = fileBuffer.slice(0, 16);
+                offset += 16;
+
+                // 2. Derive Key
+                const keyMaterial = await crypto.subtle.importKey(
+                    'raw',
+                    new TextEncoder().encode(masterKey + secureKey),
+                    { name: 'PBKDF2' },
+                    false,
+                    ['deriveKey']
+                );
+                
+                const decryptionKey = await crypto.subtle.deriveKey(
+                    {
+                        name: 'PBKDF2',
+                        salt: new Uint8Array(salt),
+                        iterations: 100000,
+                        hash: 'SHA-256'
+                    },
+                    keyMaterial,
+                    { name: 'AES-GCM', length: 256 },
+                    false,
+                    ['decrypt']
+                );
+
+                const chunks = [];
+                let duration = null;
+
+                // 3. Loop through chunks
+                while (offset < fileBuffer.byteLength) {
+                    // Header: Type(1) + IV(12) + Len(4) = 17 bytes
+                    if (offset + 17 > fileBuffer.byteLength) break;
+
+                    const type = dataView.getUint8(offset);
+                    offset += 1;
+
+                    if (type !== 1 && type !== 2) {
+                        throw new Error(`Unknown chunk type: ${type} at offset ${offset-1}`);
+                    }
+
+                    const iv = fileBuffer.slice(offset, offset + 12);
+                    offset += 12;
+
+                    const len = dataView.getUint32(offset, true); // Little endian
+                    offset += 4;
+
+                    if (offset + len > fileBuffer.byteLength) {
+                         throw new Error(`Corrupt chunk size: ${len} at offset ${offset}, file size ${fileBuffer.byteLength}`);
+                    }
+                    const encryptedData = fileBuffer.slice(offset, offset + len);
+                    offset += len;
+
+                    // Decrypt
+                    try {
+                        const decryptedData = await crypto.subtle.decrypt(
+                            { name: 'AES-GCM', iv: new Uint8Array(iv) },
+                            decryptionKey,
+                            encryptedData
+                        );
+
+                        if (type === 1) { // Video Chunk
+                            chunks.push(decryptedData);
+                        } else if (type === 2) { // Footer Chunk
+                            const footerJson = new TextDecoder().decode(decryptedData);
+                            const footer = JSON.parse(footerJson);
+                            duration = footer.duration;
+                            console.log('Found Footer. Duration:', duration);
+                        }
+                    } catch (e) {
+                        console.error('Chunk decryption failed (wrong key?):', e);
+                        throw new Error('Decryption failed. Invalid Key?');
+                    }
+                }
+
+                if (chunks.length === 0) {
+                    throw new Error('No video data found in file.');
+                }
+
+                // 4. Create Blob & Fix Duration
+                let videoBlob = new Blob(chunks, { type: 'video/webm' });
+
+                if (duration) {
+                     try {
+                        showStatus('Patching video metadata...', 'info');
+                        const fixedBlob = await new Promise((resolve) => {
+                            ysFixWebmDuration(videoBlob, duration, (fixed) => resolve(fixed));
+                        });
+                        videoBlob = fixedBlob;
+                     } catch (e) {
+                         console.warn('Duration patch failed, playing raw:', e);
+                     }
+                } else {
+                    console.warn('No duration found (crash?), playing raw stream.');
+                }
+                
+                // Play
+                const videoUrl = URL.createObjectURL(videoBlob);
+                const playbackVideo = document.getElementById('playbackVideo');
+                
+                playbackVideo.src = videoUrl;
+                playbackVideo.load();
+                
+                showStatus('Video decrypted successfully!', 'success');
+                
+            } catch (error) {
+                console.error('Decryption error:', error);
+                showError('Decryption failed: ' + error.message);
+            }
+        });
+        
+        // Playback: Clear
+        document.getElementById('clearPlaybackBtn').addEventListener('click', () => {
+            const playbackVideo = document.getElementById('playbackVideo');
+            playbackVideo.src = '';
+            document.getElementById('selectedFile').value = '';
+            document.getElementById('playMasterKey').value = '';
+            document.getElementById('playSecureKey').value = '';
+            document.getElementById('decryptAndPlayBtn').disabled = true;
+            appState.currentFile = null;
+            hideStatus();
+        });
+        
+        // Files: Refresh list
+        document.getElementById('refreshFilesBtn').addEventListener('click', refreshFilesList);
+        
+        // Files: Record new
+        document.getElementById('recordFromFilesBtn').addEventListener('click', () => {
+            navButtons.forEach(btn => btn.classList.remove('active'));
+            document.querySelector('[data-view="record"]').classList.add('active');
+            
+            Object.values(views).forEach(v => v.classList.remove('active'));
+            views.record.classList.add('active');
+            
+            goToStep(1);
+        });
+        
+        // Refresh files list (simulated - in a real app, you'd use IndexedDB or File System API)
+        async function refreshFilesList() {
+            const filesList = document.getElementById('filesList');
+            
+            // This is a simulation - in production, you would:
+            // 1. Use the File System Access API to get files
+            // 2. Or store file handles in IndexedDB
+            
+            filesList.innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-folder-open"></i>
+                    <h3>File System Access Required</h3>
+                    <p>In a production app, this would list your encrypted videos.</p>
+                    <p>Due to browser security restrictions, file listing requires additional permissions.</p>
+                </div>
+            `;
+            
+            // Update storage status
+            if ('storage' in navigator && 'estimate' in navigator.storage) {
+                const estimate = await navigator.storage.estimate();
+                const usedMB = (estimate.usage / (1024 * 1024)).toFixed(2);
+                const quotaMB = (estimate.quota / (1024 * 1024)).toFixed(2);
+                document.getElementById('storageStatus').textContent = 
+                    `Storage: ${usedMB} MB used of ${quotaMB} MB available`;
+            }
+        }
+        
+        // Utility functions
+        function showError(message) {
+            const status = document.getElementById('playbackStatus');
+            status.className = 'status-message status-error show';
+            status.innerHTML = `<i class="fas fa-exclamation-circle"></i> ${message}`;
+        }
+        
+        function showStatus(message, type) {
+            const status = document.getElementById('playbackStatus');
+            status.className = `status-message status-${type} show`;
+            status.innerHTML = `<i class="fas fa-info-circle"></i> ${message}`;
+        }
+        
+        function hideStatus() {
+            document.getElementById('playbackStatus').classList.remove('show');
+        }
+        
+        // Initialize app
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Check PWA installation
+            if (window.matchMedia('(display-mode: standalone)').matches) {
+                installButton.style.display = 'none';
+            }
+            
+            // Check camera permission on load
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                stream.getTracks().forEach(track => track.stop());
+                updatePermissionStatus(true, 'Camera permission granted');
+                document.getElementById('permissionCheck').style.display = 'none';
+            } catch (error) {
+                updatePermissionStatus(false, 'Camera permission not granted');
+            }
+            
+            // Initialize files list
+            refreshFilesList();
+            
+            // Set default file name
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            document.getElementById('fileName').value = `secure_video_${timestamp}.encvideo`;
+        });
+        
+        // Service Worker Registration
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js')
+                    .then(registration => {
+                        console.log('Service Worker registered with scope:', registration.scope);
+                    })
+                    .catch(error => {
+                        console.log('Service Worker registration failed:', error);
+                    });
+            });
+        }
+    </script>
+</body>
+</html>
