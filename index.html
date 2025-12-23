@@ -1909,47 +1909,19 @@
                         throw new Error('File location not set');
                     }
                     
-                    // Create Writable Stream (Main Thread)
-                    appState.writableStream = await appState.encryptedFileHandle.createWritable();
-                    
                     // Initialize Worker
                     appState.worker = new Worker('encryption-worker.js');
                     
-                    // Initialize Write Queue
-                    appState.writeQueue = Promise.resolve();
-                    
                     return new Promise((resolve, reject) => {
                         appState.worker.onmessage = (e) => {
-                            const { type, data, error } = e.data;
+                            const { type, error } = e.data;
                             
                             if (type === 'INIT_COMPLETE') {
-                                // Worker generated keys and salt. Write salt.
-                                appState.writeQueue = appState.writeQueue.then(async () => {
-                                    if (appState.writableStream) {
-                                        await appState.writableStream.write(data.salt);
-                                    }
-                                });
                                 resolve();
                             } 
-                            else if (type === 'ENCRYPTED_CHUNK') {
-                                // Worker returned encrypted chunk. Write it.
-                                appState.writeQueue = appState.writeQueue.then(async () => {
-                                    if (appState.writableStream) {
-                                        await appState.writableStream.write(data);
-                                    }
-                                });
-                            }
                             else if (type === 'STOP_COMPLETE') {
-                                // Worker returned footer. Write it and close.
                                 if (appState.finalizeResolve) {
-                                    appState.writeQueue = appState.writeQueue.then(async () => {
-                                        if (appState.writableStream) {
-                                            await appState.writableStream.write(data);
-                                            await appState.writableStream.close();
-                                            appState.writableStream = null;
-                                        }
-                                        appState.finalizeResolve(); // Signal stopRecording that we are done
-                                    });
+                                    appState.finalizeResolve();
                                 }
                             }
                             else if (type === 'ERROR') {
@@ -1959,12 +1931,14 @@
                             }
                         };
                         
-                        // Send Init Command
+                        // Send Init Command with the File Handle
+                        // The FileHandle is transferable
                         appState.worker.postMessage({
                             type: 'INIT',
                             data: {
                                 masterKey: appState.masterKey,
-                                secureKey: appState.secureKey
+                                secureKey: appState.secureKey,
+                                fileHandle: appState.encryptedFileHandle
                             }
                         });
                     });
@@ -2194,9 +2168,6 @@
                         };
                         
                         finalize().then(() => {
-                            // Wait for write queue to finish completely
-                            return appState.writeQueue;
-                        }).then(() => {
                             appState.worker.terminate();
                             appState.worker = null;
                             appState.isRecording = false;
