@@ -1507,6 +1507,7 @@
                             }]
                         });
                         appState.encryptedFileHandle = handle;
+                        document.getElementById('fileName').value = handle.name;
                         goToStep(2);
                     } catch (error) {
                         if (error.name !== 'AbortError') {
