@@ -2537,7 +2537,7 @@
                 // Use entries() iterator which is sometimes more robust
                 for await (const [name, entry] of appState.vaultFolderHandle.entries()) {
                     try {
-                        if (entry.kind === 'file' && name.endsWith('.encvideo')) {
+                        if (entry.kind === 'file' && name.toLowerCase().endsWith('.encvideo')) {
                             // Get file data - this is where NotFoundError usually happens
                             const file = await entry.getFile();
                             files.push({
