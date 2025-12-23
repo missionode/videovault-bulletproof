@@ -1037,10 +1037,6 @@
                         Video Quality
                     </label>
                     <div class="quality-selector">
-                        <button class="quality-btn" data-quality="ultra">
-                            <i class="fas fa-crown"></i>
-                            Ultra (4K)
-                        </button>
                         <button class="quality-btn active" data-quality="high">
                             <i class="fas fa-star"></i>
                             High (1080p)
@@ -1406,24 +1402,6 @@
                 Object.values(views).forEach(v => v.classList.remove('active'));
                 views[view].classList.add('active');
                 
-                // Security Reset: Wipe keys whenever switching tabs
-                appState.masterKey = '';
-                appState.secureKey = '';
-                
-                // Clear all password inputs
-                const passInputs = ['masterKey', 'secureKey', 'playMasterKey', 'playSecureKey'];
-                passInputs.forEach(id => {
-                    const el = document.getElementById(id);
-                    if (el) el.value = '';
-                });
-
-                // Reset strength indicators
-                const strengthBars = ['masterKeyStrength', 'secureKeyStrength'];
-                strengthBars.forEach(id => {
-                    const el = document.getElementById(id);
-                    if (el) el.className = 'password-strength empty';
-                });
-
                 // If switching to files view, refresh the list
                 if (view === 'files') {
                     refreshFilesList();
@@ -1792,8 +1770,6 @@
         // Get video quality constraints
         function getVideoConstraints() {
             switch(appState.videoQuality) {
-                case 'ultra':
-                    return { width: { ideal: 3840 }, height: { ideal: 2160 } };
                 case 'high':
                     return { width: { ideal: 1920 }, height: { ideal: 1080 } };
                 case 'medium':
@@ -1801,7 +1777,7 @@
                 case 'low':
                     return { width: { ideal: 854 }, height: { ideal: 480 } };
                 default:
-                    return { width: { ideal: 1920 }, height: { ideal: 1080 } };
+                    return { width: { ideal: 1280 }, height: { ideal: 720 } };
             }
         }
 
@@ -1933,7 +1909,7 @@
                         throw new Error('File location not set');
                     }
                     
-                    // Create Writable Stream (Main Thread - Compatible with Android)
+                    // Create Writable Stream (Main Thread)
                     appState.writableStream = await appState.encryptedFileHandle.createWritable();
                     
                     // Initialize Worker
@@ -1983,7 +1959,7 @@
                             }
                         };
                         
-                        // Send Init Command (Keys only)
+                        // Send Init Command
                         appState.worker.postMessage({
                             type: 'INIT',
                             data: {
@@ -2051,12 +2027,9 @@
                 appState.mimeType = mimeType;
 
                 // Create media recorder with defined bitrate to prevent freezing/jank
-                // Dynamic Bitrate: 12Mbps for 4K (Ultra), 2.5Mbps for others
-                const bitrate = appState.videoQuality === 'ultra' ? 12000000 : 2500000;
-                
                 appState.mediaRecorder = new MediaRecorder(stream, { 
                     mimeType,
-                    videoBitsPerSecond: bitrate
+                    videoBitsPerSecond: 2500000 // 2.5 Mbps - Good balance for 1080p
                 });
                 
                 // Streaming Encryption Handler (Send to Worker)
@@ -2544,8 +2517,7 @@
             }
 
             // Verify permission (it may be lost on reload)
-            // Use 'read' mode for scanning - safer on mobile
-            const options = { mode: 'read' };
+            const options = { mode: 'readwrite' };
             if ((await appState.vaultFolderHandle.queryPermission(options)) !== 'granted') {
                 if ((await appState.vaultFolderHandle.requestPermission(options)) !== 'granted') {
                     vaultSetup.style.display = 'block';
@@ -2563,22 +2535,15 @@
 
             try {
                 const files = [];
-                // Use entries() iterator which is sometimes more robust
-                for await (const [name, entry] of appState.vaultFolderHandle.entries()) {
-                    try {
-                        if (entry.kind === 'file' && name.toLowerCase().endsWith('.encvideo')) {
-                            // Get file data - this is where NotFoundError usually happens
-                            const file = await entry.getFile();
-                            files.push({
-                                name: name,
-                                size: file.size,
-                                lastModified: file.lastModified,
-                                handle: entry
-                            });
-                        }
-                    } catch (innerErr) {
-                        console.warn(`Skipping file ${name}:`, innerErr);
-                        // Continue to next file
+                for await (const entry of appState.vaultFolderHandle.values()) {
+                    if (entry.kind === 'file' && entry.name.endsWith('.encvideo')) {
+                        const file = await entry.getFile();
+                        files.push({
+                            name: entry.name,
+                            size: file.size,
+                            lastModified: file.lastModified,
+                            handle: entry
+                        });
                     }
                 }
 
@@ -2632,7 +2597,7 @@
                 }
             } catch (error) {
                 console.error('Scanning error:', error);
-                filesList.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><h3>Error scanning folder</h3><p>${error.message}</p></div>`;
+                filesList.innerHTML = '<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><h3>Error scanning folder</h3><p>Please try re-selecting your folder.</p></div>';
             }
             
             // Update storage status
@@ -2651,7 +2616,7 @@
             document.getElementById('selectedFile').value = file.name;
             document.getElementById('decryptAndPlayBtn').disabled = false;
             
-            // Switch to play view (Note: Nav logic will trigger key wipe for security)
+            // Switch to play view
             navButtons.forEach(btn => {
                 if (btn.getAttribute('data-view') === 'play') {
                     btn.click();
@@ -2679,15 +2644,6 @@
         async function deleteFile(file) {
             if (confirm(`Are you sure you want to delete "${file.name}"? This cannot be undone.`)) {
                 try {
-                    // Upgrade permission to write
-                    const options = { mode: 'readwrite' };
-                    if ((await appState.vaultFolderHandle.queryPermission(options)) !== 'granted') {
-                        if ((await appState.vaultFolderHandle.requestPermission(options)) !== 'granted') {
-                             showError('Delete permission denied');
-                             return;
-                        }
-                    }
-
                     await appState.vaultFolderHandle.removeEntry(file.name);
                     await refreshFilesList();
                 } catch (error) {

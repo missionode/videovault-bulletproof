@@ -36,7 +36,7 @@ self.onmessage = async (e) => {
             self.postMessage({ 
                 type: 'INIT_COMPLETE', 
                 data: { salt: self.salt } 
-            }); 
+            }); // salt is small, no need to transfer
         } catch (error) {
             self.postMessage({ type: 'ERROR', error: error.message });
         }
