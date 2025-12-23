@@ -1245,21 +1245,31 @@
                 My Encrypted Videos <small>Beta</small>
             </h2>
             <p class="step-description">
-                Manage your encrypted video files. Files are stored locally on your device.
+                Manage your encrypted video files. Files are stored locally in your chosen Vault Folder.
             </p>
             
-            <div id="filesList" class="file-list">
-                <div class="empty-state">
+            <div id="vaultSetup" class="empty-state" style="display: none;">
+                <i class="fas fa-folder-plus"></i>
+                <h3>Set up your Vault Folder</h3>
+                <p>Choose a folder on your device to store and manage your encrypted videos.</p>
+                <button id="selectVaultBtn" class="btn btn-primary" style="margin: 20px auto;">
                     <i class="fas fa-folder-open"></i>
-                    <h3>No encrypted videos found</h3>
-                    <p>Record your first encrypted video to see it here</p>
-                </div>
+                    Select Vault Folder
+                </button>
+            </div>
+
+            <div id="filesList" class="file-list">
+                <!-- Files will be listed here -->
             </div>
             
-            <div class="action-buttons">
+            <div id="filesActions" class="action-buttons" style="display: none;">
                 <button id="refreshFilesBtn" class="btn btn-primary">
                     <i class="fas fa-sync-alt"></i>
                     Refresh Files
+                </button>
+                <button id="changeVaultBtn" class="btn btn-secondary">
+                    <i class="fas fa-cog"></i>
+                    Change Folder
                 </button>
                 <button id="recordFromFilesBtn" class="btn btn-success">
                     <i class="fas fa-video"></i>
@@ -1312,6 +1322,41 @@
             deferredPrompt = null;
         });
         
+        // IndexedDB for Folder Handle Persistence
+        const dbName = 'SecureVideoVaultDB';
+        const storeName = 'settings';
+        
+        async function getDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(dbName, 1);
+                request.onupgradeneeded = () => request.result.createObjectStore(storeName);
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        async function setSetting(key, value) {
+            const db = await getDB();
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction(storeName, 'readwrite');
+                const store = transaction.objectStore(storeName);
+                const request = store.put(value, key);
+                request.onsuccess = () => resolve();
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        async function getSetting(key) {
+            const db = await getDB();
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction(storeName, 'readonly');
+                const store = transaction.objectStore(storeName);
+                const request = store.get(key);
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+            });
+        }
+
         // App State
         const appState = {
             currentStep: 1,
@@ -1326,6 +1371,7 @@
             masterKey: '',
             secureKey: '',
             encryptedFileHandle: null,
+            vaultFolderHandle: null,
             currentFile: null
         };
         
@@ -1498,14 +1544,48 @@
                     try {
                         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
                         const defaultName = `secure_video_${timestamp}.encvideo`;
+                        let handle;
 
-                        const handle = await window.showSaveFilePicker({
-                            suggestedName: defaultName,
-                            types: [{
-                                description: 'Encrypted Video File',
-                                accept: { 'application/octet-stream': ['.encvideo'] }
-                            }]
-                        });
+                        // Check if Vault Folder is set
+                        if (!appState.vaultFolderHandle) {
+                             const storedHandle = await getSetting('vaultFolderHandle');
+                             if (storedHandle) {
+                                 appState.vaultFolderHandle = storedHandle;
+                             }
+                        }
+
+                        if (appState.vaultFolderHandle) {
+                            // Smart Recording: Save directly to Vault
+                            // Check permission first
+                            const options = { mode: 'readwrite' };
+                            if ((await appState.vaultFolderHandle.queryPermission(options)) === 'granted') {
+                                handle = await appState.vaultFolderHandle.getFileHandle(defaultName, { create: true });
+                            } else {
+                                // If permission lost, ask for it or fallback
+                                if ((await appState.vaultFolderHandle.requestPermission(options)) === 'granted') {
+                                     handle = await appState.vaultFolderHandle.getFileHandle(defaultName, { create: true });
+                                } else {
+                                    // Fallback to manual picker if permission denied
+                                    handle = await window.showSaveFilePicker({
+                                        suggestedName: defaultName,
+                                        types: [{
+                                            description: 'Encrypted Video File',
+                                            accept: { 'application/octet-stream': ['.encvideo'] }
+                                        }]
+                                    });
+                                }
+                            }
+                        } else {
+                            // Manual Recording: Ask user
+                            handle = await window.showSaveFilePicker({
+                                suggestedName: defaultName,
+                                types: [{
+                                    description: 'Encrypted Video File',
+                                    accept: { 'application/octet-stream': ['.encvideo'] }
+                                }]
+                            });
+                        }
+
                         appState.encryptedFileHandle = handle;
                         document.getElementById('fileName').value = handle.name;
                         goToStep(2);
@@ -2378,36 +2458,139 @@
             hideStatus();
         });
         
+        // Files: Select Vault Folder
+        async function selectVaultFolder() {
+            try {
+                const handle = await window.showDirectoryPicker({
+                    mode: 'readwrite'
+                });
+                
+                // Persist handle in IndexedDB
+                await setSetting('vaultFolderHandle', handle);
+                appState.vaultFolderHandle = handle;
+                
+                await refreshFilesList();
+            } catch (error) {
+                if (error.name !== 'AbortError') {
+                    console.error('Folder selection error:', error);
+                    showError('Failed to select folder');
+                }
+            }
+        }
+
+        // Format file size
+        function formatBytes(bytes, decimals = 2) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const dm = decimals < 0 ? 0 : decimals;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+        }
+
         // Files: Refresh list
-        document.getElementById('refreshFilesBtn').addEventListener('click', refreshFilesList);
-        
-        // Files: Record new
-        document.getElementById('recordFromFilesBtn').addEventListener('click', () => {
-            navButtons.forEach(btn => btn.classList.remove('active'));
-            document.querySelector('[data-view="record"]').classList.add('active');
-            
-            Object.values(views).forEach(v => v.classList.remove('active'));
-            views.record.classList.add('active');
-            
-            goToStep(1);
-        });
-        
-        // Refresh files list (simulated - in a real app, you'd use IndexedDB or File System API)
         async function refreshFilesList() {
+            const vaultSetup = document.getElementById('vaultSetup');
             const filesList = document.getElementById('filesList');
+            const filesActions = document.getElementById('filesActions');
             
-            // This is a simulation - in production, you would:
-            // 1. Use the File System Access API to get files
-            // 2. Or store file handles in IndexedDB
+            if (!appState.vaultFolderHandle) {
+                const storedHandle = await getSetting('vaultFolderHandle');
+                if (storedHandle) {
+                    appState.vaultFolderHandle = storedHandle;
+                }
+            }
+
+            if (!appState.vaultFolderHandle) {
+                vaultSetup.style.display = 'block';
+                filesList.style.display = 'none';
+                filesActions.style.display = 'none';
+                return;
+            }
+
+            // Verify permission (it may be lost on reload)
+            const options = { mode: 'readwrite' };
+            if ((await appState.vaultFolderHandle.queryPermission(options)) !== 'granted') {
+                if ((await appState.vaultFolderHandle.requestPermission(options)) !== 'granted') {
+                    vaultSetup.style.display = 'block';
+                    filesList.style.display = 'none';
+                    filesActions.style.display = 'none';
+                    return;
+                }
+            }
+
+            vaultSetup.style.display = 'none';
+            filesList.style.display = 'block';
+            filesActions.style.display = 'flex';
             
-            filesList.innerHTML = `
-                <div class="empty-state">
-                    <i class="fas fa-folder-open"></i>
-                    <h3>File System Access Required</h3>
-                    <p>In a production app, this would list your encrypted videos.</p>
-                    <p>Due to browser security restrictions, file listing requires additional permissions.</p>
-                </div>
-            `;
+            filesList.innerHTML = '<div class="empty-state"><i class="fas fa-spinner fa-spin"></i><h3>Scanning folder...</h3></div>';
+
+            try {
+                const files = [];
+                for await (const entry of appState.vaultFolderHandle.values()) {
+                    if (entry.kind === 'file' && entry.name.endsWith('.encvideo')) {
+                        const file = await entry.getFile();
+                        files.push({
+                            name: entry.name,
+                            size: file.size,
+                            lastModified: file.lastModified,
+                            handle: entry
+                        });
+                    }
+                }
+
+                // Sort by newest first
+                files.sort((a, b) => b.lastModified - a.lastModified);
+
+                if (files.length === 0) {
+                    filesList.innerHTML = `
+                        <div class="empty-state">
+                            <i class="fas fa-folder-open"></i>
+                            <h3>No encrypted videos found</h3>
+                            <p>Files saved in your vault folder will appear here.</p>
+                        </div>
+                    `;
+                } else {
+                    filesList.innerHTML = '';
+                    files.forEach(file => {
+                        const date = new Date(file.lastModified).toLocaleString();
+                        const item = document.createElement('div');
+                        item.className = 'file-item';
+                        item.innerHTML = `
+                            <div class="file-info">
+                                <div class="file-icon">
+                                    <i class="fas fa-file-video"></i>
+                                </div>
+                                <div class="file-details">
+                                    <div class="file-name">${file.name}</div>
+                                    <div class="file-meta">${formatBytes(file.size)} | ${date}</div>
+                                </div>
+                            </div>
+                            <div class="file-actions">
+                                <button class="btn btn-primary play-file-btn" style="min-width: auto; padding: 8px 15px;">
+                                    <i class="fas fa-play"></i>
+                                </button>
+                                <button class="btn btn-secondary share-file-btn" style="min-width: auto; padding: 8px 15px;">
+                                    <i class="fas fa-share-alt"></i>
+                                </button>
+                                <button class="btn btn-danger delete-file-btn" style="min-width: auto; padding: 8px 15px;">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        `;
+
+                        // Add event listeners
+                        item.querySelector('.play-file-btn').onclick = () => playFile(file);
+                        item.querySelector('.share-file-btn').onclick = () => shareFile(file);
+                        item.querySelector('.delete-file-btn').onclick = () => deleteFile(file);
+
+                        filesList.appendChild(item);
+                    });
+                }
+            } catch (error) {
+                console.error('Scanning error:', error);
+                filesList.innerHTML = '<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><h3>Error scanning folder</h3><p>Please try re-selecting your folder.</p></div>';
+            }
             
             // Update storage status
             if ('storage' in navigator && 'estimate' in navigator.storage) {
@@ -2418,6 +2601,52 @@
                     `Storage: ${usedMB} MB used of ${quotaMB} MB available`;
             }
         }
+
+        // Placeholder functions for Phase 2
+        async function playFile(file) {
+            appState.currentFile = await file.handle.getFile();
+            document.getElementById('selectedFile').value = file.name;
+            document.getElementById('decryptAndPlayBtn').disabled = false;
+            
+            // Switch to play view
+            navButtons.forEach(btn => {
+                if (btn.getAttribute('data-view') === 'play') {
+                    btn.click();
+                }
+            });
+        }
+
+        async function shareFile(file) {
+            if ('share' in navigator) {
+                try {
+                    const fileData = await file.handle.getFile();
+                    await navigator.share({
+                        title: 'Encrypted Video',
+                        text: 'Check out this encrypted video',
+                        files: [fileData]
+                    });
+                } catch (error) {
+                    console.error('Share error:', error);
+                }
+            } else {
+                showError('Sharing is not supported on this device');
+            }
+        }
+
+        async function deleteFile(file) {
+            if (confirm(`Are you sure you want to delete "${file.name}"? This cannot be undone.`)) {
+                try {
+                    await appState.vaultFolderHandle.removeEntry(file.name);
+                    await refreshFilesList();
+                } catch (error) {
+                    console.error('Delete error:', error);
+                    showError('Failed to delete file');
+                }
+            }
+        }
+
+        // Files: Refresh list button handler
+        document.getElementById('refreshFilesBtn').addEventListener('click', refreshFilesList);
         
         // Utility functions
         function showError(message) {
@@ -2435,6 +2664,9 @@
         function hideStatus() {
             document.getElementById('playbackStatus').classList.remove('show');
         }
+        
+        document.getElementById('selectVaultBtn').addEventListener('click', selectVaultFolder);
+        document.getElementById('changeVaultBtn').addEventListener('click', selectVaultFolder);
         
         // Initialize app
         document.addEventListener('DOMContentLoaded', async () => {

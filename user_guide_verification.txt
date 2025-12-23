@@ -1,0 +1,11 @@
+The issue where the "Save & Share" screen displayed the default filename instead of the user-edited one has been fixed.
+
+**Details of the Fix:**
+- Modified `index.html` to update the `#fileName` input field immediately after the user selects a file in the save dialog.
+- The app now retrieves the actual name from the `FileSystemFileHandle` (`handle.name`) and reflects it in the UI.
+
+**Verification Steps:**
+1. Open the app and enter your keys to proceed.
+2. When the "Browse" / "Save As" popup appears, **change the filename** to something custom (e.g., `my_custom_video.encvideo`).
+3. Record a short video and stop it.
+4. Verify that the **File Name** field on the result screen displays your custom name (`my_custom_video.encvideo`).
