@@ -2027,9 +2027,12 @@
                 appState.mimeType = mimeType;
 
                 // Create media recorder with defined bitrate to prevent freezing/jank
+                // Dynamic Bitrate: 12Mbps for 4K (Ultra), 2.5Mbps for others
+                const bitrate = appState.videoQuality === 'ultra' ? 12000000 : 2500000;
+                
                 appState.mediaRecorder = new MediaRecorder(stream, { 
                     mimeType,
-                    videoBitsPerSecond: 2500000 // 2.5 Mbps - Good balance for 1080p
+                    videoBitsPerSecond: bitrate
                 });
                 
                 // Streaming Encryption Handler (Send to Worker)
@@ -2345,82 +2348,84 @@
                 const salt = fileBuffer.slice(0, 16);
                 offset += 16;
 
-                // 2. Derive Key
-                const keyMaterial = await crypto.subtle.importKey(
-                    'raw',
-                    new TextEncoder().encode(masterKey + secureKey),
-                    { name: 'PBKDF2' },
-                    false,
-                    ['deriveKey']
-                );
+            try {
+                showStatus('Decrypting in background...', 'info');
                 
-                const decryptionKey = await crypto.subtle.deriveKey(
-                    {
-                        name: 'PBKDF2',
-                        salt: new Uint8Array(salt),
-                        iterations: 100000,
-                        hash: 'SHA-256'
-                    },
-                    keyMaterial,
-                    { name: 'AES-GCM', length: 256 },
-                    false,
-                    ['decrypt']
-                );
+                // Initialize Worker for Decryption
+                if (appState.worker) appState.worker.terminate();
+                appState.worker = new Worker('encryption-worker.js');
+                
+                const fileBuffer = await appState.currentFile.arrayBuffer();
+                const dataView = new DataView(fileBuffer);
+                let offset = 0;
+
+                // 1. Read Salt
+                if (fileBuffer.byteLength < 16) throw new Error('Invalid file: too short');
+                const salt = fileBuffer.slice(0, 16);
+                offset += 16;
+
+                // 2. Initialize Worker with Keys
+                await new Promise((resolve, reject) => {
+                    appState.worker.onmessage = (e) => {
+                        if (e.data.type === 'INIT_DECRYPT_COMPLETE') resolve();
+                        else if (e.data.type === 'ERROR') reject(new Error(e.data.error));
+                    };
+                    appState.worker.postMessage({
+                        type: 'INIT_DECRYPT',
+                        data: { masterKey, secureKey, salt }
+                    });
+                });
 
                 const chunks = [];
                 let duration = null;
-                let mimeType = 'video/webm'; // Default
+                let mimeType = 'video/webm'; 
 
-                // 3. Loop through chunks
+                // 3. Loop through chunks and decrypt via Worker
                 while (offset < fileBuffer.byteLength) {
-                    // Header: Type(1) + IV(12) + Len(4) = 17 bytes
                     if (offset + 17 > fileBuffer.byteLength) break;
 
                     const type = dataView.getUint8(offset);
                     offset += 1;
 
-                    if (type !== 1 && type !== 2) {
-                        throw new Error(`Unknown chunk type: ${type} at offset ${offset-1}`);
-                    }
+                    if (type !== 1 && type !== 2) throw new Error(`Unknown chunk type: ${type}`);
 
                     const iv = fileBuffer.slice(offset, offset + 12);
                     offset += 12;
 
-                    const len = dataView.getUint32(offset, true); // Little endian
+                    const len = dataView.getUint32(offset, true);
                     offset += 4;
 
-                    if (offset + len > fileBuffer.byteLength) {
-                         throw new Error(`Corrupt chunk size: ${len} at offset ${offset}, file size ${fileBuffer.byteLength}`);
-                    }
+                    if (offset + len > fileBuffer.byteLength) throw new Error('Corrupt chunk size');
                     const encryptedData = fileBuffer.slice(offset, offset + len);
                     offset += len;
 
-                    // Decrypt
-                    try {
-                        const decryptedData = await crypto.subtle.decrypt(
-                            { name: 'AES-GCM', iv: new Uint8Array(iv) },
-                            decryptionKey,
-                            encryptedData
-                        );
+                    // Send to Worker
+                    const decryptedChunk = await new Promise((resolve, reject) => {
+                        appState.worker.onmessage = (e) => {
+                            if (e.data.type === 'DECRYPTED_CHUNK_COMPLETE') {
+                                resolve(e.data.data.decryptedData);
+                            } else if (e.data.type === 'ERROR') {
+                                reject(new Error(e.data.error));
+                            }
+                        };
+                        appState.worker.postMessage({
+                            type: 'DECRYPT_CHUNK',
+                            data: { iv, data: encryptedData, type }
+                        }, [encryptedData]); // Transfer to save memory
+                    });
 
-                        if (type === 1) { // Video Chunk
-                            chunks.push(decryptedData);
-                        } else if (type === 2) { // Footer Chunk
-                            const footerJson = new TextDecoder().decode(decryptedData);
-                            const footer = JSON.parse(footerJson);
-                            duration = footer.duration;
-                            if (footer.mimeType) mimeType = footer.mimeType;
-                            console.log('Found Footer. Duration:', duration, 'MIME:', mimeType);
-                        }
-                    } catch (e) {
-                        console.error('Chunk decryption failed (wrong key?):', e);
-                        throw new Error('Decryption failed. Invalid Key?');
+                    if (type === 1) { // Video Chunk
+                        chunks.push(decryptedChunk);
+                    } else if (type === 2) { // Footer Chunk
+                        const footerJson = new TextDecoder().decode(decryptedChunk);
+                        const footer = JSON.parse(footerJson);
+                        duration = footer.duration;
+                        if (footer.mimeType) mimeType = footer.mimeType;
+                        console.log('Found Footer via Worker. Duration:', duration, 'MIME:', mimeType);
                     }
                 }
 
-                if (chunks.length === 0) {
-                    throw new Error('No video data found in file.');
-                }
+                if (chunks.length === 0) throw new Error('No video data found.');
 
                 // 4. Create Blob & Fix Duration
                 let videoBlob = new Blob(chunks, { type: mimeType });
@@ -2435,8 +2440,6 @@
                      } catch (e) {
                          console.warn('Duration patch failed, playing raw:', e);
                      }
-                } else {
-                    console.warn('No duration found (crash?), playing raw stream.');
                 }
                 
                 // Play
@@ -2446,11 +2449,19 @@
                 playbackVideo.src = videoUrl;
                 playbackVideo.load();
                 
+                // Cleanup
+                appState.worker.terminate();
+                appState.worker = null;
+                
                 showStatus('Video decrypted successfully!', 'success');
                 
             } catch (error) {
                 console.error('Decryption error:', error);
                 showError('Decryption failed: ' + error.message);
+                if (appState.worker) {
+                    appState.worker.terminate();
+                    appState.worker = null;
+                }
             }
         });
         

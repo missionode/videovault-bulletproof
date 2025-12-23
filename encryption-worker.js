@@ -2,6 +2,7 @@
 self.onmessage = async (e) => {
     const { type, data } = e.data;
 
+    // --- ENCRYPTION LOGIC ---
     if (type === 'INIT') {
         try {
             self.masterKey = data.masterKey;
@@ -36,7 +37,7 @@ self.onmessage = async (e) => {
             self.postMessage({ 
                 type: 'INIT_COMPLETE', 
                 data: { salt: self.salt } 
-            }); // salt is small, no need to transfer
+            }); 
         } catch (error) {
             self.postMessage({ type: 'ERROR', error: error.message });
         }
@@ -118,6 +119,61 @@ self.onmessage = async (e) => {
             
         } catch (error) {
             self.postMessage({ type: 'ERROR', error: 'Finalize failed: ' + error.message });
+        }
+    }
+
+    // --- DECRYPTION LOGIC ---
+    else if (type === 'INIT_DECRYPT') {
+        try {
+            const { masterKey, secureKey, salt } = data;
+            
+            const keyMaterial = await crypto.subtle.importKey(
+                'raw',
+                new TextEncoder().encode(masterKey + secureKey),
+                { name: 'PBKDF2' },
+                false,
+                ['deriveKey']
+            );
+            
+            self.decryptionKey = await crypto.subtle.deriveKey(
+                {
+                    name: 'PBKDF2',
+                    salt: new Uint8Array(salt),
+                    iterations: 100000,
+                    hash: 'SHA-256'
+                },
+                keyMaterial,
+                { name: 'AES-GCM', length: 256 },
+                false,
+                ['decrypt']
+            );
+            
+            self.postMessage({ type: 'INIT_DECRYPT_COMPLETE' });
+        } catch (error) {
+            self.postMessage({ type: 'ERROR', error: 'Decryption Init Failed: ' + error.message });
+        }
+    }
+    else if (type === 'DECRYPT_CHUNK') {
+        try {
+            const { iv, data: encryptedData, type: chunkType } = data;
+            
+            const decryptedData = await crypto.subtle.decrypt(
+                { name: 'AES-GCM', iv: new Uint8Array(iv) },
+                self.decryptionKey,
+                encryptedData
+            );
+            
+            // Return decrypted data
+            self.postMessage({ 
+                type: 'DECRYPTED_CHUNK_COMPLETE', 
+                data: {
+                    decryptedData,
+                    chunkType
+                }
+            }, [decryptedData]); // Transfer buffer
+            
+        } catch (error) {
+            self.postMessage({ type: 'ERROR', error: 'Chunk Decryption Failed (Wrong Password?): ' + error.message });
         }
     }
 };
