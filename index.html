@@ -2515,7 +2515,8 @@
             }
 
             // Verify permission (it may be lost on reload)
-            const options = { mode: 'readwrite' };
+            // Use 'read' mode for scanning - safer on mobile
+            const options = { mode: 'read' };
             if ((await appState.vaultFolderHandle.queryPermission(options)) !== 'granted') {
                 if ((await appState.vaultFolderHandle.requestPermission(options)) !== 'granted') {
                     vaultSetup.style.display = 'block';
@@ -2595,7 +2596,7 @@
                 }
             } catch (error) {
                 console.error('Scanning error:', error);
-                filesList.innerHTML = '<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><h3>Error scanning folder</h3><p>Please try re-selecting your folder.</p></div>';
+                filesList.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><h3>Error scanning folder</h3><p>${error.message}</p></div>`;
             }
             
             // Update storage status
@@ -2642,6 +2643,15 @@
         async function deleteFile(file) {
             if (confirm(`Are you sure you want to delete "${file.name}"? This cannot be undone.`)) {
                 try {
+                    // Upgrade permission to write
+                    const options = { mode: 'readwrite' };
+                    if ((await appState.vaultFolderHandle.queryPermission(options)) !== 'granted') {
+                        if ((await appState.vaultFolderHandle.requestPermission(options)) !== 'granted') {
+                             showError('Delete permission denied');
+                             return;
+                        }
+                    }
+
                     await appState.vaultFolderHandle.removeEntry(file.name);
                     await refreshFilesList();
                 } catch (error) {
