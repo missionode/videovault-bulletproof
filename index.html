@@ -1902,30 +1902,76 @@
             const startBtn = document.getElementById('startRecordingBtn');
             let count = 10;
             
-            // Prepare keys in background to avoid freeze
+            // Initialize Worker & Prepare File
             appState.preparationPromise = (async () => {
-                const salt = crypto.getRandomValues(new Uint8Array(16));
-                const keyMaterial = await crypto.subtle.importKey(
-                    'raw',
-                    new TextEncoder().encode(appState.masterKey + appState.secureKey),
-                    { name: 'PBKDF2' },
-                    false,
-                    ['deriveKey']
-                );
-                
-                const encryptionKey = await crypto.subtle.deriveKey(
-                    {
-                        name: 'PBKDF2',
-                        salt: salt,
-                        iterations: 100000,
-                        hash: 'SHA-256'
-                    },
-                    keyMaterial,
-                    { name: 'AES-GCM', length: 256 },
-                    false,
-                    ['encrypt']
-                );
-                return { salt, encryptionKey };
+                try {
+                    if (!appState.encryptedFileHandle) {
+                        throw new Error('File location not set');
+                    }
+                    
+                    // Create Writable Stream (Main Thread)
+                    appState.writableStream = await appState.encryptedFileHandle.createWritable();
+                    
+                    // Initialize Worker
+                    appState.worker = new Worker('encryption-worker.js');
+                    
+                    // Initialize Write Queue
+                    appState.writeQueue = Promise.resolve();
+                    
+                    return new Promise((resolve, reject) => {
+                        appState.worker.onmessage = (e) => {
+                            const { type, data, error } = e.data;
+                            
+                            if (type === 'INIT_COMPLETE') {
+                                // Worker generated keys and salt. Write salt.
+                                appState.writeQueue = appState.writeQueue.then(async () => {
+                                    if (appState.writableStream) {
+                                        await appState.writableStream.write(data.salt);
+                                    }
+                                });
+                                resolve();
+                            } 
+                            else if (type === 'ENCRYPTED_CHUNK') {
+                                // Worker returned encrypted chunk. Write it.
+                                appState.writeQueue = appState.writeQueue.then(async () => {
+                                    if (appState.writableStream) {
+                                        await appState.writableStream.write(data);
+                                    }
+                                });
+                            }
+                            else if (type === 'STOP_COMPLETE') {
+                                // Worker returned footer. Write it and close.
+                                if (appState.finalizeResolve) {
+                                    appState.writeQueue = appState.writeQueue.then(async () => {
+                                        if (appState.writableStream) {
+                                            await appState.writableStream.write(data);
+                                            await appState.writableStream.close();
+                                            appState.writableStream = null;
+                                        }
+                                        appState.finalizeResolve(); // Signal stopRecording that we are done
+                                    });
+                                }
+                            }
+                            else if (type === 'ERROR') {
+                                console.error('Worker Error:', error);
+                                if (reject) reject(new Error(error));
+                                if (appState.finalizeReject) appState.finalizeReject(new Error(error));
+                            }
+                        };
+                        
+                        // Send Init Command
+                        appState.worker.postMessage({
+                            type: 'INIT',
+                            data: {
+                                masterKey: appState.masterKey,
+                                secureKey: appState.secureKey
+                            }
+                        });
+                    });
+                } catch (error) {
+                    console.error('Init error:', error);
+                    throw error;
+                }
             })();
 
             // Disable start button during countdown
@@ -1946,10 +1992,16 @@
                     overlay.textContent = "GO!";
                     playBeep(880, 0.3, 'square'); // Special sound
                     
-                    setTimeout(() => {
+                    setTimeout(async () => {
                         overlay.classList.remove('active');
-                        startBtn.disabled = false;
-                        startRecordingActual();
+                        try {
+                            await appState.preparationPromise;
+                            startBtn.disabled = false;
+                            startRecordingActual();
+                        } catch (e) {
+                            showError('Initialization failed: ' + e.message);
+                            startBtn.disabled = false;
+                        }
                     }, 500);
                 }
             }, 1000);
@@ -1965,137 +2017,38 @@
                     return;
                 }
 
-                if (!appState.encryptedFileHandle) {
-                    showError('File location not set. Please go back and select a file.');
-                    return;
-                }
-
-                // Retrieve pre-calculated keys
-                if (!appState.preparationPromise) {
-                    throw new Error('Encryption preparation failed');
-                }
-                const { salt, encryptionKey } = await appState.preparationPromise;
-
-                appState.encryptionKey = encryptionKey; // Store for streaming
-
-                // Create a writable stream.
-                appState.writableStream = await appState.encryptedFileHandle.createWritable();
-                
-                // Initialize Write Queue to serialize writes
-                appState.writeQueue = Promise.resolve();
-                
-                // Write File Header (Salt)
-                await appState.writableStream.write(salt);
-
-                // Get mime type based on browser support
-                const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') 
-                    ? 'video/webm;codecs=vp9'
-                    : MediaRecorder.isTypeSupported('video/webm;codecs=vp8')
+                // Get mime type based on browser support (VP8 is more stable/lighter for heat)
+                const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp8') 
                     ? 'video/webm;codecs=vp8'
+                    : MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+                    ? 'video/webm;codecs=vp9'
                     : 'video/webm';
                 
-                // Create media recorder
-                appState.mediaRecorder = new MediaRecorder(stream, { mimeType });
+                appState.mimeType = mimeType;
+
+                // Create media recorder with defined bitrate to prevent freezing/jank
+                appState.mediaRecorder = new MediaRecorder(stream, { 
+                    mimeType,
+                    videoBitsPerSecond: 2500000 // 2.5 Mbps - Good balance for 1080p
+                });
                 
-                // Streaming Encryption Handler
-                appState.mediaRecorder.ondataavailable = (event) => {
-                    if (event.data.size > 0) {
-                        // Chain the async operation to the queue
-                        appState.writeQueue = appState.writeQueue.then(async () => {
-                             if (!appState.writableStream) return;
-                             
-                             try {
-                                const chunkData = await event.data.arrayBuffer();
-                                const iv = crypto.getRandomValues(new Uint8Array(12));
-                                
-                                const encryptedChunk = await crypto.subtle.encrypt(
-                                    { name: 'AES-GCM', iv: iv },
-                                    appState.encryptionKey,
-                                    chunkData
-                                );
-
-                                // Format: [Type(1)][IV(12)][Len(4)][Data]
-                                // Type 1: Video Chunk
-                                const type = new Uint8Array([1]); 
-                                const len = new Uint8Array(4);
-                                new DataView(len.buffer).setUint32(0, encryptedChunk.byteLength, true); // Little Endian
-
-                                await appState.writableStream.write(type);
-                                await appState.writableStream.write(iv);
-                                await appState.writableStream.write(len);
-                                await appState.writableStream.write(encryptedChunk);
-
-                            } catch (err) {
-                                console.error('Streaming encryption error:', err);
-                            }
-                        });
-                    }
-                };
-                
-                // Handle recording stop
-                appState.mediaRecorder.onstop = async () => {
-                    try {
-                        // Wait for all pending writes to finish!
-                        await appState.writeQueue;
-
-                        if (appState.writableStream) {
-                            // Write Footer Chunk (Type 2)
-                            const duration = Date.now() - appState.recordingStartTime;
-                            const footerData = new TextEncoder().encode(JSON.stringify({
-                                duration: duration,
-                                timestamp: Date.now(),
-                                quality: appState.videoQuality
-                            }));
-
-                            const iv = crypto.getRandomValues(new Uint8Array(12));
-                            const encryptedFooter = await crypto.subtle.encrypt(
-                                { name: 'AES-GCM', iv: iv },
-                                appState.encryptionKey,
-                                footerData
-                            );
-
-                            const type = new Uint8Array([2]); // Type 2: Footer
-                            const len = new Uint8Array(4);
-                            new DataView(len.buffer).setUint32(0, encryptedFooter.byteLength, true);
-
-                            await appState.writableStream.write(type);
-                            await appState.writableStream.write(iv);
-                            await appState.writableStream.write(len);
-                            await appState.writableStream.write(encryptedFooter);
-
-                            await appState.writableStream.close();
-                            appState.writableStream = null;
+                // Streaming Encryption Handler (Send to Worker)
+                appState.mediaRecorder.ondataavailable = async (event) => {
+                    if (event.data.size > 0 && appState.worker) {
+                        try {
+                            const chunk = await event.data.arrayBuffer();
+                            appState.worker.postMessage({
+                                type: 'CHUNK',
+                                data: { chunk }
+                            }, [chunk]); // Transfer buffer
+                        } catch (err) {
+                            console.error('Error sending chunk to worker:', err);
                         }
-
-                        showStatus('Video encrypted and saved successfully!', 'success');
-                        
-                        // Update UI
-                        document.getElementById('recordingIndicator').style.display = 'none';
-                        const startBtn = document.getElementById('startRecordingBtn');
-                        startBtn.innerHTML = '<i class="fas fa-circle"></i> Start Recording';
-                        startBtn.classList.remove('btn-warning');
-                        startBtn.classList.add('btn-danger');
-                        startBtn.disabled = false;
-                        
-                        const fullscreenStopBtn = document.getElementById('stopRecordingFullscreenBtn');
-                        if (fullscreenStopBtn) {
-                            fullscreenStopBtn.innerHTML = '<i class="fas fa-square"></i> Stop Recording';
-                            fullscreenStopBtn.disabled = false;
-                        }
-                        
-                        document.getElementById('cameraStatus').textContent = 'Camera ready';
-                        document.getElementById('fullscreenBtn').style.display = 'none';
-
-                        goToStep(3);
-
-                    } catch (error) {
-                        console.error('Stop recording error:', error);
-                        showError('Error saving video: ' + error.message);
                     }
                 };
                 
                 // Start recording
-                appState.mediaRecorder.start(1000); // 1-second chunks
+                appState.mediaRecorder.start(2000); // 2-second chunks (Better sync for decoder)
                 appState.isRecording = true;
                 appState.recordingStartTime = Date.now();
                 
@@ -2104,7 +2057,7 @@
                 document.getElementById('startRecordingBtn').innerHTML = '<i class="fas fa-square"></i> Stop Recording';
                 document.getElementById('startRecordingBtn').classList.remove('btn-danger');
                 document.getElementById('startRecordingBtn').classList.add('btn-warning');
-                document.getElementById('cameraStatus').textContent = 'Recording (Secure Stream)...';
+                document.getElementById('cameraStatus').textContent = 'Recording (Worker Encrypted)...';
                 document.getElementById('fullscreenBtn').style.display = 'block';
                 
                 startRecordingTimer();
@@ -2207,6 +2160,10 @@
                 };
 
                 updateBtnText(`Finishing... ${countdown}`);
+                
+                // Stop Recorder first
+                appState.mediaRecorder.stop();
+                clearInterval(appState.recordingTimer);
 
                 const stopInterval = setInterval(() => {
                     countdown--;
@@ -2215,12 +2172,59 @@
                     } else {
                         clearInterval(stopInterval);
                         updateBtnText('Saving...');
-                        appState.mediaRecorder.stop();
-                        appState.isRecording = false;
-                        appState.isStopping = false; // Reset flag
                         
-                        // Stop timer
-                        clearInterval(appState.recordingTimer);
+                        // Finalize via Worker
+                        const finalize = async () => {
+                            return new Promise((resolve, reject) => {
+                                // Store resolve/reject to be called by worker onmessage
+                                appState.finalizeResolve = resolve;
+                                appState.finalizeReject = reject;
+                                
+                                const duration = Date.now() - appState.recordingStartTime;
+                                
+                                appState.worker.postMessage({
+                                    type: 'STOP',
+                                    data: {
+                                        duration: duration,
+                                        quality: appState.videoQuality,
+                                        mimeType: appState.mimeType
+                                    }
+                                });
+                            });
+                        };
+                        
+                        finalize().then(() => {
+                            // Wait for write queue to finish completely
+                            return appState.writeQueue;
+                        }).then(() => {
+                            appState.worker.terminate();
+                            appState.worker = null;
+                            appState.isRecording = false;
+                            appState.isStopping = false;
+
+                            showStatus('Video encrypted and saved successfully!', 'success');
+                            
+                            // Update UI
+                            document.getElementById('recordingIndicator').style.display = 'none';
+                            btn.innerHTML = '<i class="fas fa-circle"></i> Start Recording';
+                            btn.classList.remove('btn-warning');
+                            btn.classList.add('btn-danger');
+                            btn.disabled = false;
+                            
+                            if (fullscreenStopBtn) {
+                                fullscreenStopBtn.innerHTML = '<i class="fas fa-square"></i> Stop Recording';
+                                fullscreenStopBtn.disabled = false;
+                            }
+                            
+                            document.getElementById('cameraStatus').textContent = 'Camera ready';
+                            document.getElementById('fullscreenBtn').style.display = 'none';
+
+                            goToStep(3);
+                        }).catch(err => {
+                            console.error('Finalize error:', err);
+                            showError('Error saving: ' + err.message);
+                            if (appState.worker) appState.worker.terminate();
+                        });
                     }
                 }, 1000);
             }
@@ -2365,6 +2369,7 @@
 
                 const chunks = [];
                 let duration = null;
+                let mimeType = 'video/webm'; // Default
 
                 // 3. Loop through chunks
                 while (offset < fileBuffer.byteLength) {
@@ -2404,7 +2409,8 @@
                             const footerJson = new TextDecoder().decode(decryptedData);
                             const footer = JSON.parse(footerJson);
                             duration = footer.duration;
-                            console.log('Found Footer. Duration:', duration);
+                            if (footer.mimeType) mimeType = footer.mimeType;
+                            console.log('Found Footer. Duration:', duration, 'MIME:', mimeType);
                         }
                     } catch (e) {
                         console.error('Chunk decryption failed (wrong key?):', e);
@@ -2417,7 +2423,7 @@
                 }
 
                 // 4. Create Blob & Fix Duration
-                let videoBlob = new Blob(chunks, { type: 'video/webm' });
+                let videoBlob = new Blob(chunks, { type: mimeType });
 
                 if (duration) {
                      try {
