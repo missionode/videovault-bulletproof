@@ -1037,6 +1037,10 @@
                         Video Quality
                     </label>
                     <div class="quality-selector">
+                        <button class="quality-btn" data-quality="ultra">
+                            <i class="fas fa-crown"></i>
+                            Ultra (4K)
+                        </button>
                         <button class="quality-btn active" data-quality="high">
                             <i class="fas fa-star"></i>
                             High (1080p)
@@ -1402,6 +1406,24 @@
                 Object.values(views).forEach(v => v.classList.remove('active'));
                 views[view].classList.add('active');
                 
+                // Security Reset: Wipe keys whenever switching tabs
+                appState.masterKey = '';
+                appState.secureKey = '';
+                
+                // Clear all password inputs
+                const passInputs = ['masterKey', 'secureKey', 'playMasterKey', 'playSecureKey'];
+                passInputs.forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) el.value = '';
+                });
+
+                // Reset strength indicators
+                const strengthBars = ['masterKeyStrength', 'secureKeyStrength'];
+                strengthBars.forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) el.className = 'password-strength empty';
+                });
+
                 // If switching to files view, refresh the list
                 if (view === 'files') {
                     refreshFilesList();
@@ -1770,6 +1792,8 @@
         // Get video quality constraints
         function getVideoConstraints() {
             switch(appState.videoQuality) {
+                case 'ultra':
+                    return { width: { ideal: 3840 }, height: { ideal: 2160 } };
                 case 'high':
                     return { width: { ideal: 1920 }, height: { ideal: 1080 } };
                 case 'medium':
@@ -1777,7 +1801,7 @@
                 case 'low':
                     return { width: { ideal: 854 }, height: { ideal: 480 } };
                 default:
-                    return { width: { ideal: 1280 }, height: { ideal: 720 } };
+                    return { width: { ideal: 1920 }, height: { ideal: 1080 } };
             }
         }
 
@@ -2001,9 +2025,12 @@
                 appState.mimeType = mimeType;
 
                 // Create media recorder with defined bitrate to prevent freezing/jank
+                // Dynamic Bitrate: 12Mbps for 4K (Ultra), 2.5Mbps for others
+                const bitrate = appState.videoQuality === 'ultra' ? 12000000 : 2500000;
+                
                 appState.mediaRecorder = new MediaRecorder(stream, { 
                     mimeType,
-                    videoBitsPerSecond: 2500000 // 2.5 Mbps - Good balance for 1080p
+                    videoBitsPerSecond: bitrate
                 });
                 
                 // Streaming Encryption Handler (Send to Worker)
@@ -2587,7 +2614,7 @@
             document.getElementById('selectedFile').value = file.name;
             document.getElementById('decryptAndPlayBtn').disabled = false;
             
-            // Switch to play view
+            // Switch to play view (Note: Nav logic will trigger key wipe for security)
             navButtons.forEach(btn => {
                 if (btn.getAttribute('data-view') === 'play') {
                     btn.click();
