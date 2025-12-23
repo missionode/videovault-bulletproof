@@ -2534,15 +2534,22 @@
 
             try {
                 const files = [];
-                for await (const entry of appState.vaultFolderHandle.values()) {
-                    if (entry.kind === 'file' && entry.name.endsWith('.encvideo')) {
-                        const file = await entry.getFile();
-                        files.push({
-                            name: entry.name,
-                            size: file.size,
-                            lastModified: file.lastModified,
-                            handle: entry
-                        });
+                // Use entries() iterator which is sometimes more robust
+                for await (const [name, entry] of appState.vaultFolderHandle.entries()) {
+                    try {
+                        if (entry.kind === 'file' && name.endsWith('.encvideo')) {
+                            // Get file data - this is where NotFoundError usually happens
+                            const file = await entry.getFile();
+                            files.push({
+                                name: name,
+                                size: file.size,
+                                lastModified: file.lastModified,
+                                handle: entry
+                            });
+                        }
+                    } catch (innerErr) {
+                        console.warn(`Skipping file ${name}:`, innerErr);
+                        // Continue to next file
                     }
                 }
 
